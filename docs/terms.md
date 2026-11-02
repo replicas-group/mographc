@@ -14,7 +14,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
 ## Elements
 
 - **Element**: anything mographc measures on a frame: a piece of text, an image or SVG, or a box with a visible background or border. mographc follows each element from frame to frame.
-- **Tag**: a `data-motion="role:name"` attribute on an element, which gives it a name for findings and tests, for example `data-motion="button:send"`.
+- **Tag**: a `data-motion="role:name"` attribute on an element, which gives it a name for findings and tests, for example `data-motion="button:send"`. A tag names one element: when two elements on screen carry the same tag, mographc follows them as `button:send` and `button:send#2` and reports it (`continuity/duplicate-tag`).
 - **Role**: the kind of element, which decides which rules apply to it. A tagged element takes its role from its tag. For an untagged element, mographc infers the role from what the element is. The roles are:
   - `cursor`: a mouse pointer. Tags `cursor` and `pointer`.
   - `surface`: a box with a visible background or border that contains other elements, such as an application window, a card or a panel. Tags `window`, `card`, `panel`, `sheet`, `modal`, `popover`, `page`, `chip` and `surface`. An untagged box with a background or border that covers between 2% and 95% of the canvas is a surface.
@@ -48,7 +48,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
 - **Severity**: `error` (the run fails), `warn` (printed, but the run passes) or `off`.
 - **Compiler rule**: a rule that reports something broken, such as an image that didn't load. Compiler rules always run and `mographc check` runs only these.
 - **Preset**: a config block that makes a set of rules available and sets their severities. `recommended` is the built-in preset.
-- **Accepted finding**: a finding that a suppression applies to, either a `data-motion-ignore` attribute on the element or a time range in the config, each with a reason. Accepted findings are printed with their reason but never fail the run.
+- **Accepted finding**: a finding that a suppression applies to, either a `data-motion-ignore` attribute on the element or on one of its containers, or a time range in the config, each with a reason. Accepted findings are printed with their reason but never fail the run.
 - **Baseline**: a saved copy of a film's measurements, stored by `mographc baseline save`, usually when a person approves the film. The `regression/` rules compare the current film with its baseline.
 
 ---

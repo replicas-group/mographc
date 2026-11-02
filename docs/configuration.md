@@ -34,6 +34,8 @@ A block with `between` turns a rule off, or changes its [severity](terms.md#chec
 <div data-motion="cursor:agent" data-motion-ignore="cursor/dead-exit: it turns into the share button">
 ```
 
+On a container, `data-motion-ignore` applies to the container and everything inside it, so the reason doesn't have to be repeated on each child. A child's own `data-motion-ignore` adds to its container's.
+
 [Accepted findings](terms.md#checking) are still printed, marked `ok` with their reason, but they never fail the run. They stay visible so that when a reason stops being true, someone reading the output can notice and remove the suppression.
 
 To see every rule and its default severity, run `mographc rules` or read the [rules reference](rules.md).

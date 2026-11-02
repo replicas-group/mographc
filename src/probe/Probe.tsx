@@ -84,6 +84,62 @@ const fontStatus = () => {
   return loaded;
 };
 
+const GENERIC =
+  /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-\w+|math|emoji|fangsong|-apple-system|blinkmacsystemfont|inherit|initial)$/i;
+const installed = new Map<string, boolean>();
+/** A family with no @font-face is drawn in a fallback unless the system has it: compare its width with the generic families'. */
+const isInstalled = (family: string) => {
+  if (GENERIC.test(family)) return true;
+  if (!installed.has(family)) {
+    const ctx = document.createElement("canvas").getContext("2d")!;
+    const sample = "mmmmmmmmmmlli WQ@#0";
+    installed.set(
+      family,
+      ["monospace", "serif", "sans-serif"].some((generic) => {
+        ctx.font = `72px ${generic}`;
+        const base = ctx.measureText(sample).width;
+        ctx.font = `72px "${family}", ${generic}`;
+        return ctx.measureText(sample).width !== base;
+      }),
+    );
+  }
+  return installed.get(family)!;
+};
+
+/** An svg's painted extent: its visible shapes, so a logo whose parts grow from nothing doesn't start at full size. */
+const svgPaint = (svg: Element) => {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  let opacity = 0;
+  const shapes = svg.querySelectorAll(
+    "path, circle, ellipse, rect, line, polyline, polygon, text, image, use",
+  );
+  for (const shape of Array.from(shapes)) {
+    let o = 1;
+    for (let n: Element | null = shape; n && n !== svg; n = n.parentElement) {
+      const st = getComputedStyle(n);
+      o *=
+        st.display === "none" || st.visibility === "hidden"
+          ? 0
+          : Number(st.opacity);
+    }
+    const r = shape.getBoundingClientRect();
+    if (o < 0.01 || (r.width < 0.5 && r.height < 0.5)) continue;
+    opacity = Math.max(opacity, o);
+    x0 = Math.min(x0, r.left);
+    y0 = Math.min(y0, r.top);
+    x1 = Math.max(x1, r.right);
+    y1 = Math.max(y1, r.bottom);
+  }
+  if (!shapes.length) return null;
+  return {
+    box: (opacity ? [x0, y0, x1 - x0, y1 - y0] : [0, 0, 0, 0]) as Box,
+    opacity,
+  };
+};
+
 const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
   const fonts = fontStatus();
   // Measure against the composition's canvas, not the browser window: the renderer may
@@ -110,6 +166,8 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
   const unbounded: Box = [-1e6, -1e6, 2e6, 2e6];
   const clip = new Map<Element, Box>([[root, unbounded]]);
   const linear = new Map<Element, Linear>([[root, [1, 0, 0, 1]]]);
+  // `data-motion-ignore` on a container applies to everything inside it.
+  const ignores = new Map<Element, string>();
   const path = new Map<Element, string>([[root, "r"]]);
   const rows: RawElement[] = [];
   for (const el of Array.from(root.querySelectorAll("*"))) {
@@ -153,6 +211,10 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
       ]);
     }
     clip.set(el, box);
+    const ignore = [el.getAttribute("data-motion-ignore"), ignores.get(parent)]
+      .filter(Boolean)
+      .join("; ");
+    if (ignore) ignores.set(el, ignore);
     const tag = el.getAttribute("data-motion");
     if (op < 0.01 || (rect.width * rect.height < 4 && !tag)) continue;
     if (el.closest("svg") && el.tagName !== "svg") continue;
@@ -176,6 +238,8 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
     if (!text && !paints && !tag) continue;
     // Text is measured by its glyphs: a flex row's box spans the full width even when its words don't.
     let measured: Box = [rect.left, rect.top, rect.width, rect.height];
+    const paint = el.tagName === "svg" ? svgPaint(el) : null;
+    if (paint) measured = intersect(paint.box, measured);
     const node = Array.from(el.childNodes).find((c) => c.nodeType === 3);
     if (text && node) {
       const range = document.createRange();
@@ -191,15 +255,46 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
       t: text ? "t" : el.tagName === "svg" || el.tagName === "IMG" ? "g" : "b",
       b: local(measured).map(r1) as Box,
       v: local(visible).map(r1) as Box,
-      o: Math.round(op * 1000) / 1000,
+      o: Math.round(op * (paint?.opacity ?? 1) * 1000) / 1000,
     };
+    // For what may be a pointer: the clip around it, and the nearest container much larger than it,
+    // which its own motion is measured against.
+    if (
+      !text &&
+      (tag || Math.max(rect.width, rect.height) <= 0.4 * canvas.height)
+    ) {
+      if (box !== unbounded) row.cb = local(box).map(r1) as Box;
+      for (let a = el.parentElement; a && a !== root; a = a.parentElement) {
+        const ar = a.getBoundingClientRect();
+        if (
+          ar.width * ar.height >=
+          16 * Math.max(rect.width * rect.height, 1)
+        ) {
+          row.fr = local([ar.left, ar.top, ar.width, ar.height]).map(r1) as Box;
+          break;
+        }
+      }
+    }
     if (text) {
       row.x = text.slice(0, 80);
       row.fs = r1((parseFloat(style.fontSize) * scale) / sy);
       row.c = style.color;
       row.fw = Number(style.fontWeight) || 400;
       row.ff = family;
-      if (fonts.has(family) && !fonts.get(family)) row.fb = family;
+      // A family that is neither declared nor installed is a fallback too, unless the stack names
+      // another family that is there: listing alternatives is choosing a fallback on purpose.
+      const named = style.fontFamily
+        .split(",")
+        .map((f) => f.replace(/["']/g, "").trim());
+      const available = (f: string) =>
+        fonts.has(f) ? fonts.get(f)! : isInstalled(f);
+      if (
+        fonts.has(family)
+          ? !fonts.get(family)
+          : !GENERIC.test(family) &&
+            !named.some((f) => !GENERIC.test(f) && available(f))
+      )
+        row.fb = family;
     }
     if (paints && !text) row.bg = style.backgroundColor;
     if (el.tagName === "svg") {
@@ -222,6 +317,11 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
     if (stretch > 1.001) row.st = Math.round(stretch * 1000) / 1000;
     if (tag) {
       row.id = tag;
+      // A tagged text element (a button with its label) is pointed at by its whole box, not its letters.
+      if (text)
+        row.eb = local([rect.left, rect.top, rect.width, rect.height]).map(
+          r1,
+        ) as Box;
       // A pointer's hotspot: a marker inside it that moves with all its transforms.
       const tip = el
         .querySelector("[data-motion-tip]")
@@ -232,7 +332,6 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
           r1((tip.top + tip.height / 2 - canvas.top) / sy),
         ];
     }
-    const ignore = el.getAttribute("data-motion-ignore");
     if (ignore) row.ig = ignore;
     rows.push(row);
   }
@@ -253,12 +352,25 @@ export const Probe: React.FC<{ children: React.ReactNode }> = ({
     const images = Array.from(root.querySelectorAll("img")).map((img) =>
       img.complete ? null : img.decode().catch(() => null),
     );
-    Promise.all([document.fonts.ready, ...images]).then(() =>
-      requestAnimationFrame(() => {
-        dump(root, frame, width, height);
-        continueRender(handle);
-      }),
-    );
+    // Everything else the frame waits for too: a font loader such as @remotion/google-fonts adds its
+    // face to the document only once it has loaded, so `document.fonts.ready` alone resolves too early.
+    const others = () =>
+      (
+        (window as { remotion_delayRenderHandles?: number[] })
+          .remotion_delayRenderHandles ?? []
+      ).some((h) => h !== handle);
+    const settle = (): Promise<unknown> =>
+      new Promise((done) => requestAnimationFrame(done)).then(() =>
+        others() ? settle() : document.fonts.ready,
+      );
+    Promise.all([document.fonts.ready, ...images])
+      .then(settle)
+      .then(() =>
+        requestAnimationFrame(() => {
+          dump(root, frame, width, height);
+          continueRender(handle);
+        }),
+      );
   }, [frame, width, height]);
   return (
     // Sized to the composition, not its container: some renderer tabs give the container no size.

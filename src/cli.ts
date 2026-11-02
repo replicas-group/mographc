@@ -181,7 +181,6 @@ const main = async (): Promise<number> => {
               e.tagged ||
               ["cursor", "headline", "surface", "button"].includes(e.role),
           )
-          .filter((e) => e.frames.length > 2)
           .map((e) => ({
             composition: film.composition,
             id: e.id,

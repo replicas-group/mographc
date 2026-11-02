@@ -35,7 +35,12 @@ export interface RawElement {
   /** An svg's painted fill and outline stroke, computed (currentColor resolved). */
   pf?: string;
   ps?: string;
-  /** data-motion and data-motion-ignore. */
+  /** For a possible pointer: the box of the clip around it, and of the nearest container much larger than it. */
+  cb?: Box;
+  fr?: Box;
+  /** For tagged text: the element's own box, padding included. */
+  eb?: Box;
+  /** data-motion, and data-motion-ignore with those of its containers. */
   id?: string;
   ig?: string;
   /** The hotspot of a tagged pointer: the centre of its `data-motion-tip` marker. */

@@ -21,6 +21,8 @@ npm run verify:broken  # should fail with the demo's three bugs
 
 Run `npm run build` at the repository root after each change to `src/`, because the demo uses the built `dist/`.
 
+After changing the probe, the film model or a rule, also run `npm install && npm run verify` in [`examples/fixtures`](examples/fixtures), small films that pin cases mographc once measured wrongly. Add a film and a test there when you fix another one.
+
 ## Adding or changing a rule
 
 - A rule states a general principle and the condition it applies under, so that it holds for any film. A rule that only describes one video's symptom will misfire on other films. Brand-specific rules belong in a preset (see `examples/brand-preset`), not in mographc itself.
