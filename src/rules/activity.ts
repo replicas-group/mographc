@@ -4,10 +4,18 @@
  * were never still for more than about 0.9 s and had something changing about 65% of the time
  * (slow drift aside) with a large change half the time; films judged boring sat near 40%.
  */
-import { area, type Element, type Film } from "../film.ts";
+import {
+  area,
+  intersect,
+  isAncestor,
+  union,
+  type Element,
+  type Film,
+} from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
-import { runs, surfacesAt } from "./util.ts";
+import { viewer, type Read } from "../viewer.ts";
+import { px, runs, surfacesAt } from "./util.ts";
 
 /** Frames where at least `share` of the canvas changes. */
 const activeFrames = (film: Film, share: number, substantial = false) => {
@@ -173,6 +181,205 @@ export const smallAction = defineRule({
   },
 });
 
+const quoteRead = (r: Read) =>
+  `"${r.full.length > 40 ? `${r.full.slice(0, 38)}…` : r.full}"`;
+
+export const smallFocus = defineRule({
+  id: "staging/small-focus",
+  kind: "lint",
+  severity: "warn",
+  options: { focus: 0.05, surface: 0.25, seconds: 1.5 },
+  docs: {
+    summary:
+      "The simulated viewer doesn't spend longer than 1.5 s reading or following one thing covering less than 5% of the canvas inside a surface covering 25% to 95% of it. When it does, the view should push in on that thing.",
+    why: "When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`) and counts only the time the eye needs to spend on the thing: for a line of text, the frames in which the viewer, reading 3.5 words a second, still has words of it left to read; for another element (cursors aside), the frames in which it changes. These don't count: looking on after a line is read; reading again what the viewer already read of a text when the same text comes back into view (it scrolled away, or a list above it collapsed); finishing a line after the camera pulls back from it (it was shown at least 1.5 times as tall earlier, so the film did push in on it); and text joined by a connector to another element, because pushing in would hide what it points to. A connector is a line drawn in an svg (of any size), such as a leader line to a marker, with one end within 12 px at 1080p of the text's box, or of the small card the text sits in, and the other end at least 150 px at 1080p away from it; or a line that leaves a surface the text is in from the edge beside the text, with one end within 12 px of that edge and level with the text (within a font size above or below it, or beside it for a top or bottom edge), and the other end outside the surface and at least 150 px away; a bar 6 px thick or less reaching as far counts too. The rule reports more than 1.5 s on the same thing while its box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas. The finding quotes the text and gives its words, so a line read together with the lines around it as one paragraph is easy to recognise.",
+    fix: "Push in on the thing being looked at: scale the film's content up about it with an eased move, so it covers well over 5% of the canvas, then pull back when the eye has to move on. Cropping to the part of the surface around it works too. Don't accept this finding as a pause for reading: the pause is fine, the framing is what is wrong.",
+    options: {
+      focus:
+        "The largest share of the canvas (0.05 is 5%) the thing being looked at may cover for the rule to apply.",
+      surface:
+        "The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply.",
+      seconds:
+        "The longest time, in seconds, the eye may spend on one small thing in a wide shot.",
+    },
+  },
+  check({ film, options, report }) {
+    const v = viewer(film);
+    const act = film.activity();
+    const near = px(film, 12);
+    const reach = px(film, 150);
+    // How far the viewer has read each line; the share of each text it has read, over every time
+    // that text was on screen; and that share when each line was first looked at.
+    const progress = new Map<Read, number>();
+    const share = new Map<string, number>();
+    const prior = new Map<Read, number>();
+    /** The film already pushed in on the line: earlier it was shown at least 1.5 times as tall. */
+    const pushedIn = (r: Read, f: number, box: Box) => {
+      for (const [k, b] of r.boxes) {
+        if (k >= f) break;
+        if (b[3] >= 1.5 * box[3]) return true;
+      }
+      return false;
+    };
+    const text = (r: Read) => r.full.replace(/\s+/g, " ").trim();
+    /** A connector (an svg, or a thin bar) from the text, or the small card it's in, to somewhere else. */
+    const linked = (r: Read, f: number, box: Box) => {
+      const rows = film.rows(f);
+      const keys = [...r.elements].map((e) => e.at(f)?.raw.k ?? "");
+      const card = rows
+        .filter(
+          (x) =>
+            x.t === "b" &&
+            area(x.v) < 0.1 * film.area &&
+            keys.some((k) => isAncestor(x.k, k)),
+        )
+        .sort((a, b) => area(a.v) - area(b.v))[0];
+      // Text that paints its own card (a bubble, a tag) is anchored by that card.
+      const own = rows.find((x) => x.pb && keys.includes(x.k))?.pb;
+      const anchor = own ?? card?.v ?? box;
+      const grown: Box = [
+        anchor[0] - near,
+        anchor[1] - near,
+        anchor[2] + 2 * near,
+        anchor[3] + 2 * near,
+      ];
+      const away = (x: number, y: number) =>
+        Math.hypot(
+          Math.max(anchor[0] - x, 0, x - anchor[0] - anchor[2]),
+          Math.max(anchor[1] - y, 0, y - anchor[1] - anchor[3]),
+        );
+      const touches = (x: number, y: number) => away(x, y) <= near;
+      // Or a line that leaves a surface the text is in from the edge beside the text: its near end
+      // on that edge, level with the text (within a font size), and its far end outside the surface.
+      const surfaces = rows
+        .filter((x) => x.t === "b" && keys.some((k) => isAncestor(x.k, k)))
+        .map((x) => x.v);
+      const inside = (b: Box, x: number, y: number) =>
+        x > b[0] && x < b[0] + b[2] && y > b[1] && y < b[1] + b[3];
+      const leaves = (x0: number, y0: number, x1: number, y1: number) =>
+        surfaces.some((b) => {
+          const onSide =
+            (Math.abs(x0 - b[0]) <= near ||
+              Math.abs(x0 - b[0] - b[2]) <= near) &&
+            y0 >= box[1] - r.size &&
+            y0 <= box[1] + box[3] + r.size;
+          const onTopOrBottom =
+            (Math.abs(y0 - b[1]) <= near ||
+              Math.abs(y0 - b[1] - b[3]) <= near) &&
+            x0 >= box[0] - r.size &&
+            x0 <= box[0] + box[2] + r.size;
+          return (
+            (onSide || onTopOrBottom) &&
+            !inside(b, x1, y1) &&
+            Math.hypot(x1 - x0, y1 - y0) >= reach
+          );
+        });
+      return rows.some((x) => {
+        if (
+          x.o < 0.3 ||
+          keys.some((k) => isAncestor(k, x.k) || isAncestor(x.k, k)) ||
+          (card && isAncestor(card.k, x.k))
+        )
+          return false;
+        // A line drawn in an svg of any size: one end at the text, the other far from it.
+        if (x.sk)
+          return x.sk.some(
+            ([x0, y0, x1, y1]) =>
+              (touches(x0, y0) && away(x1, y1) >= reach) ||
+              (touches(x1, y1) && away(x0, y0) >= reach) ||
+              leaves(x0, y0, x1, y1) ||
+              leaves(x1, y1, x0, y0),
+          );
+        // A thin bar from the text reaching away.
+        const b = x.v;
+        if (
+          x.t !== "b" ||
+          Math.min(b[2], b[3]) > px(film, 6) ||
+          area(intersect(b, grown)) <= 0
+        )
+          return false;
+        const u = union([anchor, b]);
+        return u[2] - anchor[2] >= reach || u[3] - anchor[3] >= reach;
+      });
+    };
+    const spans: {
+      key: string;
+      read?: Read;
+      element?: Element;
+      frames: number[];
+      boxes: Box[];
+    }[] = [];
+    for (const f of film.frames) {
+      const g = v.gaze.get(f);
+      if (!g) continue;
+      let box: Box | undefined;
+      if (g.read) {
+        const r = g.read;
+        // What the viewer had read of the line before this frame, and by its end.
+        const before = progress.get(r) ?? 0;
+        const now = g.progress?.read ?? before;
+        const words = g.progress?.words ?? r.words;
+        progress.set(r, now);
+        // Text that scrolled away and came back is the same text: what was read of it still counts.
+        if (!prior.has(r)) prior.set(r, share.get(text(r)) ?? 0);
+        const readBy = (x: number) => Math.min(1, prior.get(r)! + x / words);
+        share.set(text(r), Math.max(share.get(text(r)) ?? 0, readBy(now)));
+        // Looking on after reading it, or reading it again, shows nothing new.
+        if (readBy(before) * words >= words - 0.25) continue;
+        box = r.boxes.get(f);
+        if (!box || pushedIn(r, f, box) || linked(r, f, box)) continue;
+      } else if (
+        g.element &&
+        !["cursor", "part", "label"].includes(g.element.role) &&
+        act.get(f)?.moved.has(g.element)
+      )
+        box = g.element.at(f)?.visible;
+      if (!box || area(box) <= 0 || area(box) >= options.focus * film.area)
+        continue;
+      const c = [box[0] + box[2] / 2, box[1] + box[3] / 2];
+      const wide = surfacesAt(film, f, options.surface, 0.95).some(
+        (s) =>
+          c[0] >= s.visible[0] &&
+          c[0] <= s.visible[0] + s.visible[2] &&
+          c[1] >= s.visible[1] &&
+          c[1] <= s.visible[1] + s.visible[3],
+      );
+      if (!wide) continue;
+      const key = g.read ? `read ${g.read.id}` : g.element!.id;
+      const last = spans[spans.length - 1];
+      if (
+        last &&
+        last.key === key &&
+        f - last.frames[last.frames.length - 1] <= 2
+      ) {
+        last.frames.push(f);
+        last.boxes.push(box);
+      } else
+        spans.push({
+          key,
+          read: g.read,
+          element: g.element ?? [...g.read!.elements][0],
+          frames: [f],
+          boxes: [box],
+        });
+    }
+    for (const { read: r0, element, frames, boxes } of spans) {
+      const [a, b] = [frames[0], frames[frames.length - 1]];
+      const seconds = (b - a + 1) / film.fps;
+      if (seconds <= options.seconds) continue;
+      const r = [...boxes].sort((p, q) => area(p) - area(q))[
+        Math.floor(boxes.length / 2)
+      ];
+      report({
+        element,
+        frames: [a, b],
+        measured: `${r0 && !element?.label.includes(r0.full.slice(0, 24)) ? `the text ${quoteRead(r0)} ` : ""}holds the simulated viewer's eye for ${seconds.toFixed(1)} s${r0 ? ` (${r0.words.toFixed(0)} words to read)` : ""} while covering only ${((area(r) / film.area) * 100).toFixed(1)}% of the canvas (${r[2].toFixed(0)}x${r[3].toFixed(0)} px at (${r[0].toFixed(0)}, ${r[1].toFixed(0)})), inside a large surface`,
+        need: `a view pushed in or cropped so what the eye spends more than ${options.seconds} s on covers at least ${(options.focus * 100).toFixed(0)}% of the canvas`,
+      });
+    }
+  },
+});
+
 export const creep = defineRule({
   id: "camera/creep",
   kind: "lint",
@@ -247,4 +454,11 @@ export const creep = defineRule({
   },
 });
 
-export const activityRules = [activity, deadAir, longShot, smallAction, creep];
+export const activityRules = [
+  activity,
+  deadAir,
+  longShot,
+  smallAction,
+  smallFocus,
+  creep,
+];

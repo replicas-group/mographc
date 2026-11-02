@@ -11,6 +11,8 @@ export interface RawElement {
   b: Box;
   /** The part of it not clipped away by itself or an ancestor. */
   v: Box;
+  /** For text that paints its own background or border, the part of its border box not clipped away. */
+  pb?: Box;
   /** Effective opacity, ancestors included. */
   o: number;
   x?: string;
@@ -38,6 +40,8 @@ export interface RawElement {
   /** data-motion and data-motion-ignore. */
   id?: string;
   ig?: string;
+  /** An svg's open strokes (lines, leader lines): where each starts and ends, [x0, y0, x1, y1] in canvas px. */
+  sk?: [number, number, number, number][];
   /** The hotspot of a tagged pointer: the centre of its `data-motion-tip` marker. */
   tp?: [number, number];
 }

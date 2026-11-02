@@ -1,7 +1,7 @@
 /**
  * Slow in and slow out, squash and stretch: the measurable principles of how things move.
  */
-import { area, type Element, type Move } from "../film.ts";
+import { area, intersectArea, type Element, type Move } from "../film.ts";
 import { defineRule } from "../rule.ts";
 import {
   carried,
@@ -505,6 +505,69 @@ export const cursorContrast = defineRule({
   },
 });
 
+export const coversText = defineRule({
+  id: "cursor/covers-text",
+  kind: "lint",
+  severity: "warn",
+  options: { seconds: 0.5, cover: 0.15 },
+  docs: {
+    summary:
+      "A cursor doesn't stand still on top of text for longer than 0.5 s, where on top means its box covers at least 15% of the text's box or of its own, whichever is smaller.",
+    why: "A cursor that stops on a label after clicking it hides the words the viewer is trying to read, often the label of the button that was just clicked. Pausing on a button for a moment to click it is fine, but staying there covers the text. The rule measures the cursor's graphic (or its own box if it has none), counts it as standing still in frames where it moves slower than 45 px/s at 1080p, and checks every text above 50% opacity that isn't part of the cursor, such as its name tag.",
+    fix: "After the click, move the cursor off the text: to empty space beside or below the button, or off the canvas if it has nothing more to do. If it has to wait before the next click, wait beside the target and move onto it just before clicking.",
+    options: {
+      seconds:
+        "The longest time, in seconds, a cursor may stand still on top of text.",
+      cover:
+        "The smallest overlap that counts as covering, as a share of the smaller of the text's box and the cursor's box (0.15 is 15%).",
+    },
+  },
+  check({ film, options, report }) {
+    const rest = px(film, 45) / film.fps;
+    for (const el of cursors(film)) {
+      const hits = new Map<string, { text: Element; frames: number[] }>();
+      for (const f of el.frames) {
+        const s = el.at(f)!;
+        if (s.opacity < 0.5 || !el.at(f - 1) || el.step(f) >= rest) continue;
+        const rows = film.rows(f);
+        const glyph = rows.find((r) => r.t === "g" && isAncestor(s.raw.k, r.k));
+        const box = glyph?.v ?? s.visible;
+        for (const r of rows) {
+          if (
+            r.t !== "t" ||
+            r.o <= 0.5 ||
+            !/[A-Za-z0-9]/.test(r.x ?? "") ||
+            isAncestor(s.raw.k, r.k)
+          )
+            continue;
+          const text = film.elementOf(f, r.k);
+          if (!text || ["label", "part", "cursor"].includes(text.role))
+            continue;
+          if (
+            intersectArea(box, r.v) <
+            options.cover * Math.min(area(box), area(r.v))
+          )
+            continue;
+          const h = hits.get(text.id) ?? { text, frames: [] };
+          h.frames.push(f);
+          hits.set(text.id, h);
+        }
+      }
+      for (const { text, frames } of hits.values())
+        for (const [a, b] of runs(frames, 1)) {
+          const seconds = (b - a + 1) / film.fps;
+          if (seconds <= options.seconds) continue;
+          report({
+            element: el,
+            frames: [a, b],
+            measured: `stands still on top of ${text.label} for ${seconds.toFixed(1)} s`,
+            need: `the cursor standing still on top of text for no more than ${options.seconds} s`,
+          });
+        }
+    }
+  },
+});
+
 export const motionRules = [
   linear,
   weakOut,
@@ -517,4 +580,5 @@ export const motionRules = [
   popsIn,
   cursorContrast,
   harshSettle,
+  coversText,
 ];

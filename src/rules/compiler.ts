@@ -112,32 +112,49 @@ export const textCut = defineRule({
   options: {},
   docs: {
     summary:
-      "Text that stays still for 0.5 s or longer has at least 85% of its area visible, not cut off by its own box, a container that clips it, or the edge of the canvas.",
-    why: "Words that are cut off look like a layout bug, and on a phone they can't be read at all. The rule checks every text and headline in each frame where it is above 50% opacity and moves less than 0.5 px from the previous frame. It compares the area of the text's glyphs that is visible with the full area of the glyphs, and reports a run of such frames lasting 0.5 s or longer in which less than 85%, but more than none, is visible. Text that is cut off only while it moves, such as text scrolling past, is not reported.",
-    fix: "Give the container room for its text (make it wider or taller, or the type smaller), move the text inside the visible area, or pan so the whole text is visible before it stops moving.",
+      "Text that stays still for 0.5 s or longer is not cut off by its own box, a container that clips it, or the edge of the canvas: at least 85% of its area is visible, and no edge cuts more than 0.2 times its font size off any side.",
+    why: "Words that are cut off look like a layout bug, and on a phone they can't be read at all. A cut through the last letters of a word, or a thin sliver of a line showing at the edge of a window, is noticed even when most of the text is visible, so the rule measures each side as well as the area. It checks all text, including the labels of buttons and other tagged elements, in each frame where it is above 50% opacity, has some part visible, and moves less than 0.5 px from the previous frame. It compares the text's glyph box with the part of it that is visible, and reports a run of such frames lasting 0.5 s or longer in which less than 85% of the area is visible, or the visible part stops more than 0.2 times the font size short of the glyph box on one side (the space a glyph box keeps above and below the letters is smaller than that, so a smaller cut doesn't reach them). Text that is cut off only while it moves, such as text scrolling past, is not reported.",
+    fix: "Give the container room for its text (make it wider or taller, or the type smaller), move the text inside the visible area, or pan so the whole text is visible before it stops moving. For a list or page cut by a window's edge, end the visible area between two lines rather than through one, or hide the line that would show only a sliver.",
   },
   check({ film, report }) {
     const hold = framesIn(film, 0.5);
     for (const el of film.elements) {
-      if (el.role !== "text" && el.role !== "headline") continue;
+      const cutAt = (f: number) => {
+        const s = el.at(f)!;
+        const [bx, by, bw, bh] = s.box;
+        const [vx, vy, vw, vh] = s.visible;
+        const sides: [string, number][] = [
+          ["left", vx - bx],
+          ["right", bx + bw - (vx + vw)],
+          ["top", vy - by],
+          ["bottom", by + bh - (vy + vh)],
+        ];
+        return sides.sort((a, b) => b[1] - a[1])[0];
+      };
       const cut = el.frames.filter((f) => {
         const s = el.at(f)!;
+        if (
+          s.raw.t !== "t" ||
+          s.opacity <= 0.5 ||
+          area(s.box) <= 0 ||
+          area(s.visible) <= 0 ||
+          el.step(f) >= 0.5
+        )
+          return false;
         return (
-          s.opacity > 0.5 &&
-          area(s.box) > 0 &&
-          area(s.visible) < 0.85 * area(s.box) &&
-          area(s.visible) > 0 &&
-          el.step(f) < 0.5
+          area(s.visible) < 0.85 * area(s.box) ||
+          cutAt(f)[1] > 0.2 * (s.raw.fs ?? s.box[3])
         );
       });
       for (const [a, b] of runs(cut, 1)) {
         if (b - a + 1 < hold) continue;
         const s = el.at(a)!;
+        const [side, by] = cutAt(a);
         report({
           element: el,
           frames: [a, b],
-          measured: `has ${Math.round((1 - area(s.visible) / area(s.box)) * 100)}% of the text "${(s.raw.x ?? "").slice(0, 30)}" cut off for ${(b - a + 1) / film.fps} s while it stays still`,
-          need: "at least 85% of the text visible whenever it stays still for 0.5 s or longer",
+          measured: `has the text "${(s.raw.x ?? "").slice(0, 30)}" cut off for ${((b - a + 1) / film.fps).toFixed(1)} s while it stays still: ${Math.round((1 - area(s.visible) / area(s.box)) * 100)}% of its area is hidden, and ${by.toFixed(0)} px (${(by / (s.raw.fs ?? s.box[3])).toFixed(2)} times its font size) is cut off its ${side}`,
+          need: "at least 85% of the text visible, and no more than 0.2 times its font size cut off any side, whenever it stays still for 0.5 s or longer",
         });
       }
     }
@@ -241,14 +258,21 @@ export const textOverlap = defineRule({
   options: {},
   docs: {
     summary:
-      "Two different texts above 20% opacity never overlap by 30% or more of the smaller one's area for 0.1 s or longer (and at least 3 frames), unless an opaque background behind the upper text covers the overlap.",
-    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.",
-    fix: "Let the old text leave before the new one appears, move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.",
+      "Two different texts never overlap by 30% or more of the smaller one's area, unless an opaque background behind the upper text covers the overlap: not for a single frame while both are at 50% opacity or more, and not for 0.1 s or longer (and at least 3 frames) while both are above 20%.",
+    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Two texts that are both at least half visible on top of each other are a glitch even for one frame, which is what a cut that is off by a frame looks like. A crossfade, where at least one of the two is below 50% opacity in every overlapping frame, is only reported when it lasts 0.1 s and at least 3 frames. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.",
+    fix: "Let the old text leave before the new one appears (check that the frame ranges of the two don't share a frame), move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.",
   },
   check({ film, report }) {
     const hits = new Map<
       string,
-      { frames: number[]; key: string; a: string; b: string }
+      {
+        frames: number[];
+        /** Frames in which both texts are at 50% opacity or more. */
+        solid: Set<number>;
+        key: string;
+        a: string;
+        b: string;
+      }
     >();
     for (const f of film.frames) {
       const rows = film.rows(f);
@@ -320,19 +344,27 @@ export const textOverlap = defineRule({
           if (la === lb) continue;
           const [a, b] = [la, lb].map((l) => readText(l.map((x) => x.r)));
           const id = [a, b].sort().join("\u0000");
-          const h = hits.get(id) ?? { frames: [], key: lower.r.k, a, b };
+          const h = hits.get(id) ?? {
+            frames: [],
+            solid: new Set<number>(),
+            key: lower.r.k,
+            a,
+            b,
+          };
           if (h.frames[h.frames.length - 1] !== f) h.frames.push(f);
+          if (lower.r.o >= 0.5 && upper.r.o >= 0.5) h.solid.add(f);
           hits.set(id, h);
         }
     }
     for (const h of hits.values())
       for (const [a, b] of runs(h.frames, 1)) {
-        if (b - a + 1 < Math.max(3, framesIn(film, 0.1))) continue;
+        const solid = [...h.solid].filter((f) => f >= a && f <= b).length;
+        if (b - a + 1 < Math.max(3, framesIn(film, 0.1)) && !solid) continue;
         report({
           element: film.elementOf(a, h.key),
           frames: [a, b],
-          measured: `"${h.a.slice(0, 30)}" and "${h.b.slice(0, 30)}" are drawn on top of each other, overlapping by at least 30% of the smaller one's area, for ${((b - a + 1) / film.fps).toFixed(2)} s`,
-          need: "only one text at a time in any spot: no two different texts overlap by 30% or more of the smaller one's area for 0.1 s or longer",
+          measured: `"${h.a.slice(0, 30)}" and "${h.b.slice(0, 30)}" are drawn on top of each other, overlapping by at least 30% of the smaller one's area, for ${b - a + 1} frame(s) (${((b - a + 1) / film.fps).toFixed(2)} s)${solid ? `, ${solid} of them with both at 50% opacity or more` : ""}`,
+          need: "only one text at a time in any spot: no two different texts overlap by 30% or more of the smaller one's area in any frame where both are at 50% opacity or more, or for 0.1 s or longer at any opacity above 20%",
         });
       }
   },

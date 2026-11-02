@@ -1,0 +1,22 @@
+{
+  "name": "mographc-rule-fixtures",
+  "version": "1.0.0",
+  "description": "Small Remotion films that each break one mographc rule, with a fixed version of each",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "remotion studio",
+    "test": "mographc test"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "mographc": "file:../..",
+    "typescript": "5.9.3"
+  }
+}

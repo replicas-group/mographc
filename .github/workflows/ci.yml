@@ -39,3 +39,9 @@ jobs:
           npm run verify
           npx mographc lint Demo --config ../brand-preset/mographc.config.ts
           if npm run verify:broken; then echo "DemoBroken should fail"; exit 1; fi
+      - name: Rule fixtures
+        working-directory: examples/rule-fixtures
+        run: |
+          npm install
+          npm install --no-save ../../mographc-*.tgz
+          npm test

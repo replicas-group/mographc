@@ -3,11 +3,17 @@
  * clearly cut off by it, never just at it; text outside any surface is either centred in the
  * space beside it or lined up with something.
  */
-import { area, intersect, isAncestor, type Element } from "../film.ts";
+import {
+  area,
+  intersect,
+  isAncestor,
+  readText,
+  type Element,
+} from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
 import { viewer } from "../viewer.ts";
-import { frames as framesIn, px, runs } from "./util.ts";
+import { contains, frames as framesIn, overlay, px, runs } from "./util.ts";
 
 /** Whether a box is standing still (moving under 2 px a frame), so its position is deliberate rather than part of a move. */
 const held = (el: Element, f: number) => {
@@ -229,4 +235,232 @@ export const unbalancedSpace = defineRule({
   },
 });
 
-export const spacingRules = [ambiguousCrop, unbalancedSpace];
+export const tightSpacing = defineRule({
+  id: "layout/tight-spacing",
+  kind: "lint",
+  severity: "warn",
+  options: { ratio: 0.5, seconds: 0.5 },
+  docs: {
+    summary:
+      "Text standing still is at least 0.5 times its font size away from the text above or below it, and from a box (a panel, bubble, code block or button) beside, above or below it; with two texts, the larger font size counts, unless it is at least twice the smaller one. Gaps held for less than 0.5 s are ignored.",
+    why: "Text squeezed against the next line or the next box reads as one crowded block, and on a small screen the two run together. `staging/no-padding` only measures text against the edges of the box it is inside; this rule measures the gap between neighbours: a heading and the panel under it, a chat bubble and the command line under it, a caption and the line after it. The threshold comes from line spacing: inside a paragraph set at a line height of 1.2 to 1.5, the gap between one line's letters and the next is at most about 0.4 times the font size, so two separate blocks closer than 0.5 times the font size read as lines of one paragraph rather than as two things. Between two texts the larger font size counts, because a heading's spacing is judged at its own size; but when one is at least twice the size of the other (a large title over its subtitle), the difference in size already sets them apart, and the smaller size counts. Lines of the same font size and family stacked within 0.6 times their font size are one paragraph and aren't compared with each other, and pieces of text side by side on one line are one line. A label right above or below the box it names (a speaker's name over their chat bubble, a caption under an image) isn't crowding it: one line of at most 4 words, at most 0.8 times the size of the text in the box (or of 40 px at 1080p when the box has no text), with its left edge, right edge or centre within one font size of the box's. Text that paints its own background or border (a chat bubble, a button) is measured by that painted box, and text clipped by a container by its visible part. Cursors and markers (elements tagged `marker`, `highlight` or `annotation`, such as a ring drawn around a card to point it out) are drawn over the layout rather than part of it, so neither they nor anything inside them count as neighbours. A box counts when it is at least 2 font sizes wide and 1.5 font sizes tall (for a box beside the text rather than above or below it, at least 3 font sizes tall, so an icon or a tag next to a word is left alone), and isn't the box the text is inside. The rule checks text at least 10 px tall at 1080p above 50% opacity, in frames where both the text and its neighbour moved less than 1 px since the previous frame.",
+    fix: "Add space between the two: a margin or gap of at least the required size (the finding gives it in px), or move one of them. If the two belong together, set them as one paragraph in the same font size, or put the text inside the box with padding.",
+    options: {
+      ratio:
+        "The smallest gap allowed, as a multiple of the font size (with two texts, the larger one, or the smaller one when the larger is at least twice its size).",
+      seconds:
+        "The shortest time, in seconds, a gap must stay too small to be reported.",
+    },
+  },
+  check({ film, options, report }) {
+    const legible = px(film, 10);
+    const hits = new Map<
+      string,
+      {
+        el: Element;
+        text: string;
+        other: string;
+        side: string;
+        frames: number[];
+        gaps: number[];
+        need: number;
+      }
+    >();
+    const overlap = (a: number, al: number, b: number, bl: number) =>
+      Math.min(a + al, b + bl) - Math.max(a, b);
+    const quote = (x: string) =>
+      `"${x.length > 32 ? `${x.slice(0, 30)}…` : x}"`;
+    for (const f of film.frames) {
+      const before = new Map(film.rows(f - 1).map((r) => [r.k, r]));
+      const still = (r: (typeof rows)[number]) => {
+        const p = before.get(r.k);
+        return !!p && p.b.every((v, i) => Math.abs(v - r.b[i]) < 1);
+      };
+      const rows = film
+        .rows(f)
+        .filter((r) => r.o > 0.5 && !overlay(film, f, r.k));
+      const texts = rows.filter(
+        (r) =>
+          r.t === "t" &&
+          /[A-Za-z0-9]/.test(r.x ?? "") &&
+          (r.fs ?? 0) >= legible &&
+          area(r.v) > 0.5 * area(r.b) &&
+          still(r),
+      );
+      // What the eye sees of a text: its painted box if it has one, else its visible glyphs.
+      const outline = (r: (typeof texts)[number]) => r.pb ?? r.v;
+      const boxes = rows
+        .filter((r) => (r.t === "b" || r.pb) && still(r))
+        .map((r) => ({ k: r.k, b: r.pb ?? r.v, painted: !!r.pb }))
+        .filter((x) => area(x.b) > 0 && area(x.b) < 0.9 * film.area);
+      // Pieces of one line, and lines of one paragraph, are one block of text.
+      const block = texts.map((_, i) => i);
+      const root = (i: number): number =>
+        block[i] === i ? i : (block[i] = root(block[i]));
+      texts.forEach((a, i) =>
+        texts.forEach((b, j) => {
+          if (j <= i) return;
+          const fs = Math.max(a.fs!, b.fs!);
+          const line =
+            Math.abs(a.v[1] + a.v[3] / 2 - (b.v[1] + b.v[3] / 2)) <
+              0.5 * Math.max(a.v[3], b.v[3]) &&
+            -overlap(a.v[0], a.v[2], b.v[0], b.v[2]) < 1.2 * fs;
+          const paragraph =
+            !a.pb &&
+            !b.pb &&
+            Math.max(a.fs!, b.fs!) / Math.min(a.fs!, b.fs!) < 1.05 &&
+            a.ff === b.ff &&
+            overlap(a.v[0], a.v[2], b.v[0], b.v[2]) > 0 &&
+            -overlap(a.v[1], a.v[3], b.v[1], b.v[3]) < 0.6 * fs;
+          if (line || paragraph) block[root(j)] = root(i);
+        }),
+      );
+      // A block's words, so a finding names the text by what it says.
+      const words = (i: number) =>
+        readText(texts.filter((_, j) => root(j) === root(i)));
+      const name = (k: string, text?: string, painted = false) => {
+        const e = film.elementOf(f, k);
+        if (!text) return e?.label ?? "a box";
+        const what = e?.tagged
+          ? `${e.id} ${quote(text)}`
+          : `text ${quote(text)}`;
+        return painted ? `the box of ${what}` : what;
+      };
+      const hit = (
+        i: number,
+        otherKey: string,
+        other: string,
+        side: string,
+        gap: number,
+        need: number,
+      ) => {
+        const t = texts[i];
+        const el = film.elementOf(f, t.k);
+        const o = film.elementOf(f, otherKey);
+        if (!el || !o || el === o) return;
+        // One finding per pair, whichever of the two is measured from.
+        const id = [el.id, o.id].sort().join("|");
+        const h = hits.get(id) ?? {
+          el,
+          text: words(i),
+          other,
+          side,
+          frames: [],
+          gaps: [],
+          need,
+        };
+        if (h.frames[h.frames.length - 1] !== f) {
+          h.frames.push(f);
+          h.gaps.push(gap);
+        }
+        hits.set(id, h);
+      };
+      /**
+       * A label naming the box right above or below it (a speaker's name over their bubble, a
+       * caption under an image): one short line, at most 0.8 times the size of the text in the box (or
+       * of display type, when the box has none), lined up with the box's left edge, right edge or centre.
+       */
+      const caption = (i: number, tb: Box, box: Box, boxSize: number) => {
+        const t = texts[i];
+        const fs = t.fs!;
+        const x = [tb[0], tb[0] + tb[2], tb[0] + tb[2] / 2];
+        const y = [box[0], box[0] + box[2], box[0] + box[2] / 2];
+        return (
+          !t.pb &&
+          t.v[3] <= 1.6 * fs &&
+          words(i).split(/\s+/).length <= 4 &&
+          fs <= 0.8 * (boxSize || px(film, 40)) &&
+          x.some((v, k) => Math.abs(v - y[k]) <= fs)
+        );
+      };
+      texts.forEach((t, i) => {
+        const tb = outline(t);
+        // The text below it, from another block.
+        texts.forEach((o, j) => {
+          const ob = outline(o);
+          if (
+            root(i) === root(j) ||
+            isAncestor(t.k, o.k) ||
+            isAncestor(o.k, t.k) ||
+            ob[1] <= tb[1] ||
+            overlap(tb[0], tb[2], ob[0], ob[2]) <= 0
+          )
+            return;
+          const gap = ob[1] - (tb[1] + tb[3]);
+          // A title at least twice its subtitle's size is set apart by size: the smaller one counts.
+          const [lo, hi] = [t.fs!, o.fs!].sort((a, b) => a - b);
+          const need = options.ratio * (hi >= 2 * lo ? lo : hi);
+          if (
+            (o.pb && caption(i, tb, o.pb, o.fs!)) ||
+            (t.pb && caption(j, ob, t.pb, t.fs!))
+          )
+            return;
+          if (gap >= 0 && gap < need)
+            hit(i, o.k, name(o.k, words(j), !!o.pb), "above", gap, need);
+        });
+        // A box beside, above or below it that isn't the box it's in.
+        const fs = t.fs!;
+        const need = options.ratio * fs;
+        for (const x of boxes) {
+          if (
+            x.k === t.k ||
+            isAncestor(x.k, t.k) ||
+            isAncestor(t.k, x.k) ||
+            contains(x.b, t.v) ||
+            x.b[2] < 2 * fs ||
+            x.b[3] < 1.5 * fs
+          )
+            continue;
+          const [gap, side]: [number, string] =
+            overlap(tb[0], tb[2], x.b[0], x.b[2]) > 0
+              ? x.b[1] >= tb[1] + tb[3] / 2
+                ? [x.b[1] - (tb[1] + tb[3]), "above"]
+                : [tb[1] - (x.b[1] + x.b[3]), "below"]
+              : overlap(tb[1], tb[3], x.b[1], x.b[3]) > 0 && x.b[3] >= 3 * fs
+                ? x.b[0] >= tb[0]
+                  ? [x.b[0] - (tb[0] + tb[2]), "left of"]
+                  : [tb[0] - (x.b[0] + x.b[2]), "right of"]
+                : [Infinity, ""];
+          if (gap < 0 || gap >= need) continue;
+          const j = texts.findIndex((o) => o.k === x.k);
+          const inside = rows.filter(
+            (r) => r.t === "t" && (r.k === x.k || isAncestor(x.k, r.k)),
+          );
+          if (
+            (side === "above" || side === "below") &&
+            caption(
+              i,
+              tb,
+              x.b,
+              inside.length ? Math.max(...inside.map((r) => r.fs ?? 0)) : 0,
+            )
+          )
+            continue;
+          hit(
+            i,
+            x.k,
+            x.painted && j >= 0 ? name(x.k, words(j), true) : name(x.k),
+            side,
+            gap,
+            need,
+          );
+        }
+      });
+    }
+    for (const h of hits.values())
+      for (const [a, b] of runs(h.frames, 2)) {
+        if (b - a + 1 < framesIn(film, options.seconds)) continue;
+        const gaps = h.gaps
+          .filter((_, i) => h.frames[i] >= a && h.frames[i] <= b)
+          .sort((p, q) => p - q);
+        report({
+          element: h.el,
+          frames: [a, b],
+          measured: `${h.el.tagged ? `${quote(h.text)} ` : ""}is ${gaps[Math.floor(gaps.length / 2)].toFixed(0)} px ${h.side} ${h.other} for ${((b - a + 1) / film.fps).toFixed(1)} s`,
+          need: `a gap of at least ${options.ratio} times the font size, ${h.need.toFixed(0)} px here, between text and the text or box next to it`,
+        });
+      }
+  },
+});
+
+export const spacingRules = [ambiguousCrop, unbalancedSpace, tightSpacing];

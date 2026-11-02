@@ -22,6 +22,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
   - `text`: any other text. Tags `text`, `caption` and `label`.
   - `button`: something that is clicked. Tags `button`, `target` and `link`.
   - `logo`: a logo. Tag `logo`.
+  - `marker`: something drawn over the film to point at or annotate another element, such as a ring around a card, an arrow or a highlight. Tags `marker`, `highlight` and `annotation`. Layout rules don't treat a marker, or anything inside it, as part of the layout.
   - `graphic`: an untagged image, SVG or small box.
 
   Any other role in a tag is kept as written, and only the rules that apply to every element check it.
@@ -40,7 +41,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
 ## Reading
 
 - **Caption**: in the `attention/` rules, text at least 32 px tall at 1080p that isn't in a monospace font and isn't inside a surface. (As a tag, `caption` gives an element the `text` role.)
-- **Simulated viewer**: mographc's estimate of what a person watching the film looks at and reads. On each frame it picks the element the eye is most likely on (something that just appeared or moved, or the next unread line of text) and assumes a reading speed of 3.5 words a second. Rules under `attention/` and the `toBeRead` and `toBeTheFocus` matchers use it.
+- **Simulated viewer**: mographc's estimate of what a person watching the film looks at and reads. On each frame it picks the element the eye is most likely on (something that just appeared or moved, or the next unread line of text) and assumes a reading speed of 3.5 words a second. Rules under `attention/`, `staging/small-focus`, and the `toBeRead` and `toBeTheFocus` matchers use it.
 
 ## Checking
 

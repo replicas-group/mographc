@@ -93,6 +93,8 @@ export interface Glance {
   label: string;
   read?: Read;
   element?: Element;
+  /** Words of the line read by the end of this frame, and the line's words. */
+  progress?: { read: number; words: number };
 }
 
 export interface Viewer {
@@ -520,6 +522,10 @@ export const viewer = (film: Film): Viewer => {
         : (target?.element?.label ?? "nothing"),
       read: target?.read,
       element: target?.element,
+      progress: target?.read && {
+        read: target.read.read,
+        words: target.read.words,
+      },
     });
   }
   const out = { reads, gaze, onsets, asking };
