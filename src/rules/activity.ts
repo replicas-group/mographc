@@ -7,6 +7,7 @@
 import { area, type Element, type Film } from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
+import { viewer } from "../viewer.ts";
 import { runs, surfacesAt } from "./util.ts";
 
 /** Frames where at least `share` of the canvas changes. */
@@ -173,6 +174,90 @@ export const smallAction = defineRule({
   },
 });
 
+export const smallFocus = defineRule({
+  id: "staging/small-focus",
+  kind: "lint",
+  severity: "warn",
+  options: { focus: 0.05, surface: 0.25, seconds: 1.5 },
+  docs: {
+    summary:
+      "The simulated viewer's eye doesn't stay on one thing covering less than 5% of the canvas, inside a surface covering 25% to 95% of it, for longer than 1.5 s. When it does, the view should push in on that thing.",
+    why: "When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`): on each frame it takes what the eye is on, a line of text or another element (cursors aside), and measures its box. It reports a stretch longer than 1.5 s on the same thing while that box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas.",
+    fix: "Push in on the thing being looked at: scale the film's content up about it with an eased move, so it covers well over 5% of the canvas, then pull back when the eye has to move on. Cropping to the part of the surface around it works too. Don't accept this finding as a pause for reading: the pause is fine, the framing is what is wrong.",
+    options: {
+      focus:
+        "The largest share of the canvas (0.05 is 5%) the thing being looked at may cover for the rule to apply.",
+      surface:
+        "The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply.",
+      seconds:
+        "The longest time, in seconds, the eye may stay on one small thing in a wide shot.",
+    },
+  },
+  check({ film, options, report }) {
+    const v = viewer(film);
+    const spans: {
+      key: string;
+      element?: Element;
+      frames: number[];
+      boxes: Box[];
+    }[] = [];
+    for (const f of film.frames) {
+      const g = v.gaze.get(f);
+      const box = g?.read
+        ? g.read.boxes.get(f)
+        : g?.element && !["cursor", "part", "label"].includes(g.element.role)
+          ? g.element.at(f)?.visible
+          : undefined;
+      if (
+        !g ||
+        !box ||
+        area(box) <= 0 ||
+        area(box) >= options.focus * film.area
+      )
+        continue;
+      const c = [box[0] + box[2] / 2, box[1] + box[3] / 2];
+      const wide = surfacesAt(film, f, options.surface, 0.95).some(
+        (s) =>
+          c[0] >= s.visible[0] &&
+          c[0] <= s.visible[0] + s.visible[2] &&
+          c[1] >= s.visible[1] &&
+          c[1] <= s.visible[1] + s.visible[3],
+      );
+      if (!wide) continue;
+      const key = g.read ? `read ${g.read.id}` : g.element!.id;
+      const last = spans[spans.length - 1];
+      if (
+        last &&
+        last.key === key &&
+        f - last.frames[last.frames.length - 1] <= 2
+      ) {
+        last.frames.push(f);
+        last.boxes.push(box);
+      } else
+        spans.push({
+          key,
+          element: g.element ?? [...g.read!.elements][0],
+          frames: [f],
+          boxes: [box],
+        });
+    }
+    for (const { element, frames, boxes } of spans) {
+      const [a, b] = [frames[0], frames[frames.length - 1]];
+      const seconds = (b - a + 1) / film.fps;
+      if (seconds <= options.seconds) continue;
+      const r = [...boxes].sort((p, q) => area(p) - area(q))[
+        Math.floor(boxes.length / 2)
+      ];
+      report({
+        element,
+        frames: [a, b],
+        measured: `holds the simulated viewer's eye for ${seconds.toFixed(1)} s while covering only ${((area(r) / film.area) * 100).toFixed(1)}% of the canvas (${r[2].toFixed(0)}x${r[3].toFixed(0)} px at (${r[0].toFixed(0)}, ${r[1].toFixed(0)})), inside a large surface`,
+        need: `a view pushed in or cropped so what the eye stays on for more than ${options.seconds} s covers at least ${(options.focus * 100).toFixed(0)}% of the canvas`,
+      });
+    }
+  },
+});
+
 export const creep = defineRule({
   id: "camera/creep",
   kind: "lint",
@@ -247,4 +332,11 @@ export const creep = defineRule({
   },
 });
 
-export const activityRules = [activity, deadAir, longShot, smallAction, creep];
+export const activityRules = [
+  activity,
+  deadAir,
+  longShot,
+  smallAction,
+  smallFocus,
+  creep,
+];

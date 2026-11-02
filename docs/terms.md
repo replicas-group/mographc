@@ -40,7 +40,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
 ## Reading
 
 - **Caption**: in the `attention/` rules, text at least 32 px tall at 1080p that isn't in a monospace font and isn't inside a surface. (As a tag, `caption` gives an element the `text` role.)
-- **Simulated viewer**: mographc's estimate of what a person watching the film looks at and reads. On each frame it picks the element the eye is most likely on (something that just appeared or moved, or the next unread line of text) and assumes a reading speed of 3.5 words a second. Rules under `attention/` and the `toBeRead` and `toBeTheFocus` matchers use it.
+- **Simulated viewer**: mographc's estimate of what a person watching the film looks at and reads. On each frame it picks the element the eye is most likely on (something that just appeared or moved, or the next unread line of text) and assumes a reading speed of 3.5 words a second. Rules under `attention/`, `staging/small-focus`, and the `toBeRead` and `toBeTheFocus` matchers use it.
 
 ## Checking
 

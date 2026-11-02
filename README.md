@@ -107,6 +107,7 @@ npx mographc verify
 ## Examples
 
 - [`examples/demo`](examples/demo) is a short film with a chat window, a cursor and a headline. Its `Demo` composition passes every check, and `DemoBroken` is the same film with three bugs added.
+- [`examples/fixtures`](examples/fixtures) has a small film for each of several rules that shows the problem, next to a fixed version, with tests that check the rule reports one and not the other.
 - [`examples/brand-preset`](examples/brand-preset) is a [preset](docs/terms.md#checking) of brand rules (colours, typeface, type weight, no shadows) written with the public API, as a starting point for your own.
 
 ## Contributing

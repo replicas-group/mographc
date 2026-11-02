@@ -32,21 +32,21 @@ No element is visible for 0.07 s or less (2 frames at 30 fps) and never again.
 
 Compiler rule, always on.
 
-Text that stays still for 0.5 s or longer has at least 85% of its area visible, not cut off by its own box, a container that clips it, or the edge of the canvas.
+Text that stays still for 0.5 s or longer is not cut off by its own box, a container that clips it, or the edge of the canvas: at least 85% of its area is visible, and no edge cuts more than 0.2 times its font size off any side.
 
-**Why:** Words that are cut off look like a layout bug, and on a phone they can't be read at all. The rule checks every text and headline in each frame where it is above 50% opacity and moves less than 0.5 px from the previous frame. It compares the area of the text's glyphs that is visible with the full area of the glyphs, and reports a run of such frames lasting 0.5 s or longer in which less than 85%, but more than none, is visible. Text that is cut off only while it moves, such as text scrolling past, is not reported.
+**Why:** Words that are cut off look like a layout bug, and on a phone they can't be read at all. A cut through the last letters of a word, or a thin sliver of a line showing at the edge of a window, is noticed even when most of the text is visible, so the rule measures each side as well as the area. It checks all text, including the labels of buttons and other tagged elements, in each frame where it is above 50% opacity, has some part visible, and moves less than 0.5 px from the previous frame. It compares the text's glyph box with the part of it that is visible, and reports a run of such frames lasting 0.5 s or longer in which less than 85% of the area is visible, or the visible part stops more than 0.2 times the font size short of the glyph box on one side (the space a glyph box keeps above and below the letters is smaller than that, so a smaller cut doesn't reach them). Text that is cut off only while it moves, such as text scrolling past, is not reported.
 
-**Fix:** Give the container room for its text (make it wider or taller, or the type smaller), move the text inside the visible area, or pan so the whole text is visible before it stops moving.
+**Fix:** Give the container room for its text (make it wider or taller, or the type smaller), move the text inside the visible area, or pan so the whole text is visible before it stops moving. For a list or page cut by a window's edge, end the visible area between two lines rather than through one, or hide the line that would show only a sliver.
 
 ### `layout/text-overlap`
 
 Compiler rule, always on.
 
-Two different texts above 20% opacity never overlap by 30% or more of the smaller one's area for 0.1 s or longer (and at least 3 frames), unless an opaque background behind the upper text covers the overlap.
+Two different texts never overlap by 30% or more of the smaller one's area, unless an opaque background behind the upper text covers the overlap: not for a single frame while both are at 90% opacity or more, and not for 0.1 s or longer (and at least 3 frames) while both are above 20%.
 
-**Why:** Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.
+**Why:** Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Two texts drawn at full strength on top of each other are a visible glitch even for one frame, which is what a cut that is off by a frame looks like; a crossfade, where both are partly transparent, is only reported when it lasts 0.1 s and at least 3 frames. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.
 
-**Fix:** Let the old text leave before the new one appears, move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.
+**Fix:** Let the old text leave before the new one appears (check that the frame ranges of the two don't share a frame), move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.
 
 ### `layout/subject-off-canvas`
 
@@ -74,6 +74,21 @@ Text that isn't inside a surface (a window, card or panel), such as a caption or
 | `align`   | `10`    | How close, in px at 1080p, an edge of the text must be to another element's edge or centre, or the canvas's, to count as lined up with it. |
 | `seconds` | `0.5`   | The shortest time, in seconds, the problem must last to be reported.                                                                       |
 | `minGap`  | `24`    | The smallest size, in px at 1080p, the larger gap must have for the text to be checked.                                                    |
+
+### `layout/tight-spacing`
+
+Default: warn.
+
+Text standing still is at least 0.4 times its font size away from the text above or below it, and from a box (a panel, bubble, code block or button) beside, above or below it; with two texts, the smaller font size counts. Gaps held for less than 0.5 s are ignored.
+
+**Why:** Text squeezed against the next line or the next box reads as one crowded block, and on a small screen the two run together. `staging/no-padding` only measures text against the edges of the box it is inside; this rule measures the gap between neighbours: a heading and the panel under it, a chat bubble and the command line under it, a caption and the line after it. Lines of the same font size and family stacked within 0.6 times their font size are one paragraph and aren't compared with each other, and pieces of text side by side on one line are one line. A box counts when it is at least 2 font sizes wide and 1.5 font sizes tall (for a box beside the text rather than above or below it, at least 3 font sizes tall, so an icon or a tag next to a word is left alone), and isn't the box the text is inside. The rule checks text at least 10 px tall at 1080p above 50% opacity, in frames where both the text and its neighbour moved less than 1 px since the previous frame, and measures the gap between the text's glyphs and the neighbour's box.
+
+**Fix:** Add space between the two: a margin or gap of at least the required size (the finding gives it in px), or move one of them. If the two belong together, set them as one paragraph in the same font size, or put the text inside the box with padding.
+
+| Option    | Default | What it controls                                                                            |
+| --------- | ------- | ------------------------------------------------------------------------------------------- |
+| `ratio`   | `0.4`   | The smallest gap allowed, as a multiple of the font size (with two texts, the smaller one). |
+| `seconds` | `0.5`   | The shortest time, in seconds, a gap must stay too small to be reported.                    |
 
 ## assets
 
@@ -235,6 +250,21 @@ A cursor never spends 0.1 s or longer over a background whose WCAG contrast rati
 | `ratio`   | `1.6`   | The minimum WCAG contrast ratio between the cursor and the background under it (1 means identical colours, 21 is black on white). |
 | `seconds` | `0.1`   | How long, in seconds, the contrast must stay below the ratio before the rule reports it.                                          |
 
+### `cursor/covers-text`
+
+Default: warn.
+
+A cursor doesn't stand still on top of text for longer than 0.5 s, where on top means its box covers at least 15% of the text's box or of its own, whichever is smaller.
+
+**Why:** A cursor that stops on a label after clicking it hides the words the viewer is trying to read, often the label of the button that was just clicked. Pausing on a button for a moment to click it is fine, but staying there covers the text. The rule measures the cursor's graphic (or its own box if it has none), counts it as standing still in frames where it moves slower than 45 px/s at 1080p, and checks every text above 50% opacity that isn't part of the cursor, such as its name tag.
+
+**Fix:** After the click, move the cursor off the text: to empty space beside or below the button, or off the canvas if it has nothing more to do. If it has to wait before the next click, wait beside the target and move onto it just before clicking.
+
+| Option    | Default | What it controls                                                                                                              |
+| --------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `seconds` | `0.5`   | The longest time, in seconds, a cursor may stand still on top of text.                                                        |
+| `cover`   | `0.15`  | The smallest overlap that counts as covering, as a share of the smaller of the text's box and the cursor's box (0.15 is 15%). |
+
 ## pace
 
 ### `pace/activity`
@@ -328,6 +358,22 @@ While a surface covering 25% to 95% of the canvas is visible, the substantial ch
 | `surface` | `0.25`  | The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply. |
 | `seconds` | `0.8`   | How long, in seconds, the change must stay inside a small region before the rule reports it.       |
 
+### `staging/small-focus`
+
+Default: warn.
+
+The simulated viewer's eye doesn't stay on one thing covering less than 5% of the canvas, inside a surface covering 25% to 95% of it, for longer than 1.5 s. When it does, the view should push in on that thing.
+
+**Why:** When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`): on each frame it takes what the eye is on, a line of text or another element (cursors aside), and measures its box. It reports a stretch longer than 1.5 s on the same thing while that box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas.
+
+**Fix:** Push in on the thing being looked at: scale the film's content up about it with an eased move, so it covers well over 5% of the canvas, then pull back when the eye has to move on. Cropping to the part of the surface around it works too. Don't accept this finding as a pause for reading: the pause is fine, the framing is what is wrong.
+
+| Option    | Default | What it controls                                                                                        |
+| --------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `focus`   | `0.05`  | The largest share of the canvas (0.05 is 5%) the thing being looked at may cover for the rule to apply. |
+| `surface` | `0.25`  | The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply.      |
+| `seconds` | `1.5`   | The longest time, in seconds, the eye may stay on one small thing in a wide shot.                       |
+
 ### `staging/title-off-centre`
 
 Default: error.
@@ -356,6 +402,23 @@ When a surface (a window, card or panel) covering 12% to 90% of the canvas is st
 | Option  | Default | What it controls                                                                                              |
 | ------- | ------- | ------------------------------------------------------------------------------------------------------------- |
 | `inset` | `14`    | The smallest distance, in px at 1080p, allowed between text and the visible edge of the surface it is inside. |
+
+### `staging/empty-surface`
+
+Default: warn.
+
+A surface (a window, card or panel) covering 10% to 90% of the canvas that stands still for 1 s or longer is not mostly empty: it doesn't have content in only 3 or fewer of the 9 cells of a 3 × 3 grid laid over it while all that content fits in a box covering a third of the surface or less.
+
+**Why:** A large window that is mostly empty, with its content bunched in one corner or with nothing in it at all, spends the canvas on blank space: the content that matters is small, and the viewer's eye has nowhere to go in the rest of the frame. The rule divides the visible part of each surface above 90% opacity into a 3 × 3 grid, and counts a cell as filled when an element above 30% opacity lying inside the surface (any text, image or box, whether or not it is inside the surface in the page structure) reaches into it by at least a fifth of the cell's width and height, or by half of its own. Boxes that span 90% of the surface's width or height, such as a title bar, a sidebar or a background layer, don't count, though the text on them does. A surface is mostly empty when 3 or fewer cells are filled and the box around all its content covers at most 34% of the surface, so content gathered in one corner or along one edge is reported but a few elements spread across the surface are not. It only checks frames where the surface is whole on the canvas (a close-up that crops a surface at the canvas edge is framing, not an empty surface) and moved or resized by 1 px or less since the previous frame, and reports stretches of 1 s or longer.
+
+**Fix:** Make the surface fit its content (a smaller window or card), zoom in on the part of the surface that has content, or lay the content out to fill it with larger type or more of the real product's content. Bring a surface's content in together with it rather than holding it empty.
+
+| Option     | Default | What it controls                                                                                                                  |
+| ---------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `surface`  | `0.1`   | The smallest share of the canvas (0.1 is 10%) a surface must cover to be checked.                                                 |
+| `cells`    | `3`     | The largest number of the 9 grid cells that may hold content for the surface to count as mostly empty.                            |
+| `together` | `0.34`  | The largest share of the surface (0.34 is 34%) the box around all its content may cover for the surface to count as mostly empty. |
+| `seconds`  | `1`     | The shortest time, in seconds, a surface must stay mostly empty to be reported.                                                   |
 
 ### `staging/text-too-small`
 

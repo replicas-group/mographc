@@ -66,6 +66,7 @@ npx mographc verify      # compiler, linter and your tests; exits 1 on any error
 
 - Fix every error. Each finding says what was measured, what the rule requires (after "Required:"), and how to fix it. `npx mographc explain <rule>` explains why the rule exists and what its options mean.
 - Read every warning, and fix it unless you can say why the film is right as it is.
+- Fix framing warnings on a section's key moment by changing the shot, never by accepting them. When `staging/small-action`, `staging/small-focus` or `pace/dead-air` fires while the viewer is on the line or action a section is about, push in on it (or reframe so it fills more of the canvas) and give the hold something to change. "It's a pause for reading" is not a reason to accept these: the pause can stay, but in a wide shot the key line is small and the rest of the canvas is empty while it's read.
 - Don't change a rule's options or turn it off to make the film pass, because the rule is there to catch something a viewer would notice. If breaking a rule is intended (for example, a cursor that turns into an element of the next shot instead of leaving), accept that one finding where it happens and give the reason:
   ```tsx
   <div data-motion="cursor:agent" data-motion-ignore="cursor/dead-exit: it turns into the share button">

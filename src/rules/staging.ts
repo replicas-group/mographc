@@ -7,6 +7,7 @@ import {
   intersect,
   intersectArea,
   isAncestor,
+  union,
   type Element,
 } from "../film.ts";
 import { defineRule } from "../rule.ts";
@@ -159,6 +160,109 @@ export const noPadding = defineRule({
           frames: [a, b],
           measured: `has text ${Math.max(0, gap).toFixed(0)} px from its edge${cut ? `, and ${cut} lines of text cut off by its edge` : ""}`,
           need: `text at least ${options.inset} px at 1080p from the surface's edges, and at most one line cut off`,
+        });
+      }
+    }
+  },
+});
+
+export const emptySurface = defineRule({
+  id: "staging/empty-surface",
+  kind: "lint",
+  severity: "warn",
+  options: { surface: 0.1, cells: 3, together: 0.34, seconds: 1 },
+  docs: {
+    summary:
+      "A surface (a window, card or panel) covering 10% to 90% of the canvas that stands still for 1 s or longer is not mostly empty: it doesn't have content in only 3 or fewer of the 9 cells of a 3 × 3 grid laid over it while all that content fits in a box covering a third of the surface or less.",
+    why: "A large window that is mostly empty, with its content bunched in one corner or with nothing in it at all, spends the canvas on blank space: the content that matters is small, and the viewer's eye has nowhere to go in the rest of the frame. The rule divides the visible part of each surface above 90% opacity into a 3 × 3 grid, and counts a cell as filled when an element above 30% opacity lying inside the surface (any text, image or box, whether or not it is inside the surface in the page structure) reaches into it by at least a fifth of the cell's width and height, or by half of its own. Boxes that span 90% of the surface's width or height, such as a title bar, a sidebar or a background layer, don't count, though the text on them does. A surface is mostly empty when 3 or fewer cells are filled and the box around all its content covers at most 34% of the surface, so content gathered in one corner or along one edge is reported but a few elements spread across the surface are not. It only checks frames where the surface is whole on the canvas (a close-up that crops a surface at the canvas edge is framing, not an empty surface) and moved or resized by 1 px or less since the previous frame, and reports stretches of 1 s or longer.",
+    fix: "Make the surface fit its content (a smaller window or card), zoom in on the part of the surface that has content, or lay the content out to fill it with larger type or more of the real product's content. Bring a surface's content in together with it rather than holding it empty.",
+    options: {
+      surface:
+        "The smallest share of the canvas (0.1 is 10%) a surface must cover to be checked.",
+      cells:
+        "The largest number of the 9 grid cells that may hold content for the surface to count as mostly empty.",
+      together:
+        "The largest share of the surface (0.34 is 34%) the box around all its content may cover for the surface to count as mostly empty.",
+      seconds:
+        "The shortest time, in seconds, a surface must stay mostly empty to be reported.",
+    },
+  },
+  check({ film, options, report }) {
+    for (const el of film.elements.filter((e) => e.role === "surface")) {
+      const hits: [number, number, Box | undefined][] = [];
+      for (const f of el.frames) {
+        const s = el.at(f)!;
+        const prev = el.at(f - 1);
+        const v = s.visible;
+        if (
+          s.opacity < 0.9 ||
+          area(v) < options.surface * film.area ||
+          area(v) > 0.9 * film.area ||
+          area(v) < 0.98 * area(s.clipped) ||
+          !prev ||
+          prev.box.some((x, i) => Math.abs(x - s.box[i]) > 1)
+        )
+          continue;
+        const content = film
+          .rows(f)
+          .filter(
+            (r) =>
+              r.k !== s.raw.k &&
+              !isAncestor(r.k, s.raw.k) &&
+              r.o > 0.3 &&
+              area(r.v) > 0 &&
+              intersectArea(r.v, v) >= 0.8 * area(r.v) &&
+              !(
+                r.t === "b" &&
+                (r.v[2] >= 0.9 * v[2] || r.v[3] >= 0.9 * v[3])
+              ) &&
+              !["cursor", "part", "label"].includes(
+                film.elementOf(f, r.k)?.role ?? "",
+              ),
+          )
+          // Text that paints its own box (a button, an input) fills the whole box.
+          .map((r) => intersect(r.pb ?? r.v, v));
+        let filled = 0;
+        for (let i = 0; i < 3; i += 1)
+          for (let j = 0; j < 3; j += 1) {
+            const cell: Box = [
+              v[0] + (i * v[2]) / 3,
+              v[1] + (j * v[3]) / 3,
+              v[2] / 3,
+              v[3] / 3,
+            ];
+            if (
+              content.some((c) => {
+                const x = intersect(c, cell);
+                return (
+                  area(x) > 0 &&
+                  x[2] >= Math.min(0.2 * cell[2], 0.5 * c[2]) &&
+                  x[3] >= Math.min(0.2 * cell[3], 0.5 * c[3])
+                );
+              })
+            )
+              filled += 1;
+          }
+        const box = content.length ? union(content) : undefined;
+        if (
+          filled <= options.cells &&
+          (!box || area(box) <= options.together * area(v))
+        )
+          hits.push([f, filled, box]);
+      }
+      for (const [a, b] of runs(
+        hits.map((h) => h[0]),
+        2,
+      )) {
+        const seconds = (b - a + 1) / film.fps;
+        if (seconds < options.seconds) continue;
+        const [, filled, box] = hits.find((h) => h[0] === b)!;
+        const v = el.at(b)!.visible;
+        report({
+          element: el,
+          frames: [a, b],
+          measured: `stands still for ${seconds.toFixed(1)} s, ${Math.round(v[2])}x${Math.round(v[3])} px, with content in only ${filled} of the 9 cells of a 3 × 3 grid over it${box ? ` (all its content fits in ${Math.round(box[2])}x${Math.round(box[3])} px at (${Math.round(box[0])}, ${Math.round(box[1])}))` : " (it is empty)"}`,
+          need: `content in more than ${options.cells} of the 9 cells or spread over more than ${(options.together * 100).toFixed(0)}% of the surface, or a surface no larger than its content`,
         });
       }
     }
@@ -651,6 +755,7 @@ export const popOut = defineRule({
 export const stagingRules = [
   titleOffCentre,
   noPadding,
+  emptySurface,
   textTooSmall,
   textOverProduct,
   doubleExposure,
