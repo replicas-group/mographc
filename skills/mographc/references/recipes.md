@@ -1,6 +1,6 @@
 # Recipes: Remotion code that passes the rules
 
-Each recipe is plain Remotion code, written as pure functions of `frame`, so every frame can be computed on its own and renders the same way each time.
+Each recipe is plain Remotion code, written as pure functions of `frame`, so every frame can be computed on its own and renders the same way each time. Words such as move, ease-out, stretch and tip have the meanings given in `node_modules/mographc/docs/terms.md`.
 
 ## Easing
 
@@ -8,9 +8,9 @@ Each recipe is plain Remotion code, written as pure functions of `frame`, so eve
 import { Easing, interpolate } from "remotion";
 
 export const CURVE = {
-  move: Easing.bezier(0.4, 0, 0.2, 1), // A → B between two rest points: ease in and out
-  arrive: Easing.bezier(0.16, 1, 0.3, 1), // something arriving fast or from off screen: strong ease-out
-  leave: Easing.bezier(0.7, 0, 0.84, 0), // exits that clear the frame: ease in, no ease-out needed
+  move: Easing.bezier(0.4, 0, 0.2, 1), // from one still position to another: speeds up, then slows down
+  arrive: Easing.bezier(0.16, 1, 0.3, 1), // arriving fast or from off the canvas: slows down strongly at the end
+  leave: Easing.bezier(0.7, 0, 0.84, 0), // leaving the canvas: speeds up, and doesn't need to slow down
 };
 
 /** `from` → `to` between frames a and b, clamped, on a curve. Never call interpolate without an easing. */
@@ -29,11 +29,11 @@ export const tween = (
   });
 ```
 
-Viewers judge how heavy an object is by how long it takes to move, so the duration should suit the object: a small chip can snap into place in 6 to 8 frames, while a window travelling half the screen should take 20 to 30. The longer a move, the stronger its ease-out must be (`easing/weak-out`): above about 0.8 s, use a curve that ends flat, like `move` or `arrive`.
+Viewers judge how heavy an object is by how long it takes to move, so the duration should suit the object: at 30 fps, a small chip can move into place in 6 to 8 frames (0.2 to 0.27 s), while a window travelling half the canvas should take 20 to 30 frames (0.67 to 1 s). The longer a move, the more strongly it must slow down at the end. `easing/weak-out` requires an ease-out strength (the share of the move's time spent on its last 20% of distance) of at least 0.26 for moves under 0.4 s, 0.33 for moves of 0.4 to 0.8 s, and 0.40 for moves of 0.8 s or longer. For moves of 0.8 s or longer, use a curve that ends flat, like `move` or `arrive`.
 
 ## A camera that frames the action
 
-Wrap each section in a camera that frames the region where the action is (`staging/small-action`). Move the focus and the scale between shots on one eased curve. Every camera move should go to a subject and settle. Don't add a slow constant zoom or drift to make a hold look like it's moving: it isn't counted as movement, and `camera/creep` reports it. During a hold, keep the content changing instead.
+Wrap each section in a camera that frames the region where the action is (`staging/small-action`). Move the camera's centre and zoom between shots on one eased curve. Every camera move should go to a specific element, slow down, and stop there. Don't add a slow, constant zoom or pan to make a still shot look like it's moving: it isn't counted as change, and `camera/creep` reports it when it lasts 1.2 s or more. While a shot stays still, keep the content changing instead.
 
 ```tsx
 type Shot = { at: number; x: number; y: number; scale: number }; // frame, the canvas point to centre, zoom
@@ -80,7 +80,7 @@ export const Camera: React.FC<{
 
 ## One progress value for compound motion
 
-When a surface moves, scales and changes size at once, drive everything from **one** eased progress value. Ease its **on-screen rectangle**, not scale and size separately: easing them separately makes an edge swell past its landing and come back (`easing/edge-reversal`).
+When a surface (a window, card or panel) moves, scales and changes size at once, drive everything from one eased progress value. Ease its on-screen rectangle, not its scale and size separately. Easing them separately can make an edge go past where it ends up and then come back, which `easing/edge-reversal` reports when an edge goes back by more than 12 px at 1080p or 3% of its travel.
 
 ```ts
 type Rect = { x: number; y: number; w: number; h: number };
@@ -93,20 +93,20 @@ const mixRect = (a: Rect, b: Rect, t: number): Rect => ({
 });
 
 const t = tween(frame, 30, 54, 0, 1); // one curve
-const rect = mixRect(ROW, WINDOW, t); // the screen rect eases
+const rect = mixRect(ROW, WINDOW, t); // the on-screen rectangle eases
 const scale = rect.w / CONTENT_WIDTH; // content scale follows the rect
 ```
 
-If two animations are chained so that one starts when the other ends (a layout change, then a transform), the speed drops to almost zero between them and the motion appears to hesitate (`easing/stutter`). Overlap them, or drive both from one value.
+If two animations are chained so that one starts when the other ends (a layout change, then a transform), the speed drops to almost zero between them and the motion appears to hesitate. `easing/stutter` reports a frame whose speed is under 35% of the frames on either side when both are moving at 450 px/s or more. Overlap them, or drive both from one value.
 
-## A cursor with squash and stretch
+## A cursor that stretches with its speed
 
-This cursor enters from off the canvas, eases between targets, squashes on a click, stretches with its speed, and moves quickly off the nearest edge when it's done. The `data-motion-tip` marker is its hotspot, so tests can check that clicks land on their targets.
+This cursor enters from off the canvas, eases between targets, squashes slightly on a click, stretches along its direction of travel when it moves fast, and moves quickly off the nearest edge when it's done. The `data-motion-tip` element marks its tip, the point that clicks, so tests can check that clicks land on their targets. `cursor/no-stretch` requires a cursor to be stretched to at least 1.06 on at least half of the frames where it moves at 900 px/s or more.
 
 ```tsx
 // A plain arrow on a 32 x 32 grid, tip at (3, 2). Swap in your brand's cursor.
 const ARROW = "M3 2 L3 26 L9.5 20 L14 30 L18 28 L13.5 18.5 L22 18.5 Z";
-type Key = { at: number; x: number; y: number }; // frames, canvas px; keys at the same point hold it there
+type Key = { at: number; x: number; y: number }; // frames, canvas px; two keys at the same point keep it still between them
 
 const pointAt = (frame: number, keys: Key[]) => {
   let { x, y } = keys[0];
@@ -128,7 +128,7 @@ export const Cursor: React.FC<{
   const p = pointAt(frame, keys);
   const q = pointAt(frame - 1, keys);
   const speed = Math.hypot(p.x - q.x, p.y - q.y); // px per frame
-  const stretch = 1 + Math.min(0.22, speed / 150); // squash and stretch along the travel
+  const stretch = 1 + Math.min(0.22, speed / 150); // longer along the direction of travel, narrower across it
   const angle = (Math.atan2(p.y - q.y, p.x - q.x) * 180) / Math.PI;
   const press = clicks.some((c) => frame >= c && frame < c + 4) ? 0.8 : 1;
   const tip = { x: (3 / 32) * size, y: (2 / 32) * size };
@@ -152,7 +152,7 @@ export const Cursor: React.FC<{
           width: size,
         }}
       >
-        {/* The white outline keeps it readable on dark and light backgrounds (cursor/low-contrast). */}
+        {/* The white outline keeps it visible on dark and light backgrounds (cursor/low-contrast). */}
         <svg
           viewBox="0 0 32 32"
           width={size}
@@ -182,7 +182,7 @@ export const Cursor: React.FC<{
   );
 };
 
-// Usage: in from the bottom-right edge, click Send at frame 24, hold, fling off the left edge.
+// Usage: in from the bottom-right edge, click Send at frame 24, stay still, then move quickly off the left edge.
 <Cursor
   frame={frame}
   name="agent"
@@ -196,15 +196,15 @@ export const Cursor: React.FC<{
 />;
 ```
 
-- **Start a new path where the old one ends.** When one path hands off to another (for example, the cursor rides along with a page as it scales), start the new path exactly where the old one is at that frame. If the anchor points differ, the cursor jumps (`continuity/jump`).
-- **Don't fade a cursor out where it stands.** If it has to disappear into something (it turns into the next shot's element), suppress `cursor/dead-exit` on it, with the reason.
+- Start a new path where the old one ends. When the cursor switches from one path to another (for example, it starts moving with a page as the page scales), start the new path exactly where the old one is at that frame. If the two paths don't meet, the cursor jumps, and `continuity/jump` reports a move of more than 40 px at 1080p in one frame that is over four times the movement in the frames around it.
+- Don't fade a cursor out where it stands. If it has to disappear into something (for example, it turns into an element of the next shot), accept the `cursor/dead-exit` finding on it with `data-motion-ignore` and the reason.
 
 ## Entrances and exits
 
-- Bring things in with an ease-out and a small move or scale on the same curve as their fade, rather than a fade alone (`animate/fade-only`). The movement shows where the element came from.
-- Take things out with an ease-in, or have them pushed out by what replaces them. Don't unmount something mid-shot (`frame < T ? <Chip /> : null`) without fading or moving it out first (`animate/pop-out`).
+- Bring elements in with an ease-out and a small move or scale on the same curve as their fade, rather than a fade alone (`animate/fade-only`). The movement shows where the element came from.
+- Take elements out with an ease-in, or have them pushed out by what replaces them. Don't remove something in the middle of a shot (`frame < T ? <Chip /> : null`) without fading or moving it out first (`animate/pop-out`).
 - Keep one text at a time in any spot. When a message replaces another in the same place, remove the old one before the new one fades in, or push it out of the way (`layout/text-overlap`), because overlapping words can't be read.
-- Build a container and its contents together: start revealing the contents while the container is still growing, so there's no moment where an empty container sits still.
+- Build a container and its contents together: start revealing the contents while the container is still growing, so there's no moment where an empty container stays still.
 
 ## Typing
 

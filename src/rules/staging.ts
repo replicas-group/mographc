@@ -1,6 +1,6 @@
 /**
- * Staging, pace and animation: whether the viewer can read what's shown, in time,
- * and whether everything that changes is animated with intent.
+ * Layout, pacing and animation: whether the viewer can read what's shown in time, and whether
+ * everything that changes on screen is animated rather than switched in a single frame.
  */
 import {
   area,
@@ -20,15 +20,21 @@ export const titleOffCentre = defineRule({
   options: { tolerance: 16, vertical: 64 },
   docs: {
     summary:
-      "A card with only type on it (an opening word, a title, an end lockup) is centred on the canvas.",
-    why: "With nothing else in the frame, viewers judge the type's position against the frame's edges, so being a few dozen pixels off looks like a mistake.",
-    fix: "Centre the group's measured glyphs, not its box: an icon, a gap or letter spacing shifts the visual centre. The finding gives the offset to correct.",
+      "When the canvas shows only text and graphics (no surface or button), the centre of the group they form is within 16 px at 1080p of the canvas centre horizontally and within 64 px at 1080p vertically.",
+    why: "With nothing else on screen, viewers judge the position of a title against the edges of the canvas, so a title a few dozen pixels off centre looks like a mistake. The rule checks frames where no surface (a window, card or panel) covering more than 0.2% of the canvas and no button is above 30% opacity. It takes the bounding box of every other element above 30% opacity that covers less than half the canvas, skips frames with fewer than two such elements or a group wider than 80% of the canvas, and reports an offset that lasts at least 0.33 s. The vertical tolerance is larger because a title with a tagline below it is often placed slightly above centre on purpose.",
+    fix: "Move the group by the offset the finding gives. Centre the visible letters and graphics rather than their layout box, because an icon, a gap or letter spacing inside the box can shift where the content actually sits.",
+    options: {
+      tolerance:
+        "How far, in px at 1080p, the group's centre may be from the canvas centre horizontally.",
+      vertical:
+        "How far, in px at 1080p, the group's centre may be from the canvas centre vertically.",
+    },
   },
   check({ film, options, report }) {
     const tol = px(film, options.tolerance);
     const bad: [number, number, number][] = [];
     for (const f of film.frames) {
-      // Any product surface in frame, even a thin row about to grow, means it isn't a title card.
+      // Any surface on screen, even a thin row about to grow, means the frame isn't showing only a title.
       if (
         surfacesAt(film, f, 0.002).length ||
         film.find({ role: "button" }).some((b) => (b.at(f)?.opacity ?? 0) > 0.3)
@@ -54,7 +60,7 @@ export const titleOffCentre = defineRule({
       const y1 = Math.max(...items.map((s) => s.visible[1] + s.visible[3]));
       const dx = (x0 + x1) / 2 - film.width / 2;
       const dy = (y0 + y1) / 2 - film.height / 2;
-      // Vertically, a lockup sits on the optical centre with its tagline below; horizontally there's no excuse.
+      // Vertically, a title with a tagline below it is often placed slightly high on purpose; horizontally it never is.
       if (
         (Math.abs(dx) > tol || Math.abs(dy) > px(film, options.vertical)) &&
         x1 - x0 < 0.8 * film.width
@@ -71,8 +77,8 @@ export const titleOffCentre = defineRule({
         mid.map((x) => x[i]).sort((p, q) => p - q)[Math.floor(mid.length / 2)];
       report({
         frames: [a, b],
-        measured: `the type is off-centre by (${med(1) > 0 ? "+" : ""}${med(1).toFixed(0)}, ${med(2) > 0 ? "+" : ""}${med(2).toFixed(0)}) px`,
-        need: `within ${options.tolerance} px of the centre horizontally, ${options.vertical} px vertically`,
+        measured: `the group of text and graphics on screen has its centre (${med(1) > 0 ? "+" : ""}${med(1).toFixed(0)}, ${med(2) > 0 ? "+" : ""}${med(2).toFixed(0)}) px from the canvas centre (horizontal, vertical; positive is right and down)`,
+        need: `the group's centre within ${options.tolerance} px at 1080p of the canvas centre horizontally and within ${options.vertical} px at 1080p vertically`,
       });
     }
   },
@@ -85,9 +91,13 @@ export const noPadding = defineRule({
   options: { inset: 14 },
   docs: {
     summary:
-      "Text sits inside its window with padding, never crammed against or cut by the edge.",
-    why: "A window whose content touches its edges looks broken, even if the product does that at its own scale. The rule only checks frames where the window is held still, because a page scrolling past an edge is motion rather than framing.",
-    fix: "Add padding between the window's edge and its content, or frame the window so the content sits inside it (pan, or zoom slightly less).",
+      "When a surface (a window, card or panel) covering 12% to 90% of the canvas is standing still, the text inside it is at least 14 px at 1080p from its visible edges, and at most one line of that text is cut off by them.",
+    why: "A window whose content touches or runs past its edges looks broken, even if the real product does that at its own size. The rule looks at text smaller than 40 px at 1080p and above 50% opacity inside a surface above 90% opacity, and measures the smallest distance from that text to the surface's visible edges; a line counts as cut off when less than 90% of it is visible. It only checks frames where the surface and the text have each moved 1 px or less since the previous frame, because a page scrolling past an edge is motion rather than a layout problem, and it reports problems that last at least 0.5 s.",
+    fix: "Add padding between the surface's edge and its content, or move or zoom the view (pan, or zoom in slightly less) so the content sits inside the surface with room around it.",
+    options: {
+      inset:
+        "The smallest distance, in px at 1080p, allowed between text and the visible edge of the surface it is inside.",
+    },
   },
   check({ film, options, report }) {
     const inset = px(film, options.inset);
@@ -147,8 +157,8 @@ export const noPadding = defineRule({
         report({
           element: el,
           frames: [a, b],
-          measured: `text ${Math.max(0, gap).toFixed(0)} px from the window's edge${cut ? `, ${cut} lines cut by it` : ""}`,
-          need: `>= ${options.inset} px inset, nothing cut`,
+          measured: `has text ${Math.max(0, gap).toFixed(0)} px from its edge${cut ? `, and ${cut} lines of text cut off by its edge` : ""}`,
+          need: `text at least ${options.inset} px at 1080p from the surface's edges, and at most one line cut off`,
         });
       }
     }
@@ -162,9 +172,15 @@ export const textTooSmall = defineRule({
   options: { minSize: 14, briefSeconds: 1.5 },
   docs: {
     summary:
-      "A product surface held on screen can be read on a phone, which means its body text is at least about 14 px at 1080p.",
-    why: "Product videos are often watched on phones. A whole page shrunk to fit the frame shows that the page exists, but its text can't be read. One brief full view to show scale is fine.",
-    fix: "Zoom in to the part that matters and move through it in place (pan or scroll toward a destination) instead of shrinking the whole surface to fit.",
+      "While a surface (a window, card or panel) covers 25% to 95% of the canvas, the median font size of the text inside it is at least 14 px at 1080p; stretches shorter than 1 s are ignored.",
+    why: "Product videos are often watched on phones, where smaller text can't be read. A whole page shrunk to fit the canvas shows that the page exists, but nobody can read it. The rule takes the text inside surfaces above 90% opacity that is above 50% opacity and smaller than 40 px at 1080p, and only checks frames with at least 12 such pieces of text. The first stretch of small text is reported as a warning instead of an error if it lasts 1.5 s or less, so one short full view of a page to show its size is allowed.",
+    fix: "Zoom in on the part of the surface that matters and pan or scroll through it, instead of shrinking the whole surface to fit the canvas.",
+    options: {
+      minSize:
+        "The smallest median font size, in px at 1080p, allowed for the text inside a large surface.",
+      briefSeconds:
+        "The longest time, in seconds, the first stretch of small text may last and still be reported only as a warning.",
+    },
   },
   check({ film, options, report }) {
     const small: [number, number][] = [];
@@ -206,15 +222,15 @@ export const textTooSmall = defineRule({
         .sort((p, q) => p - q);
       report({
         frames: [a, b],
-        measured: `a product surface is held ${seconds.toFixed(1)} s with its text at a median ${med[Math.floor(med.length / 2)].toFixed(0)} px${brief ? " (allowed once, briefly, to show scale)" : ""}`,
-        need: `>= ${options.minSize} px at 1080p`,
+        measured: `a surface is on screen for ${seconds.toFixed(1)} s with a median font size of ${med[Math.floor(med.length / 2)].toFixed(0)} px for its text${brief ? " (one short view of a whole page is allowed, so this is only a warning)" : ""}`,
+        need: `a median font size of at least ${options.minSize} px at 1080p`,
         severity: brief ? "warn" : "error",
       });
     }
   },
 });
 
-/** Headline letters on screen in a frame: large type that isn't part of a product surface. */
+/** Headline text on screen in a frame: large text that isn't inside a surface. */
 const headlineLetters = (film: Element["film"], f: number) =>
   film.find({ role: "headline" }).filter((e) => {
     const s = e.at(f);
@@ -228,9 +244,12 @@ export const textOverProduct = defineRule({
   options: { seconds: 0.2 },
   docs: {
     summary:
-      "Headline type never overlaps the product: no letter sits partly over a window or card.",
-    why: "Type that cuts across the interface looks like a layout mistake, and makes both the words and the product harder to read.",
-    fix: "Give the headline its own region of the frame, or clear the product before the type arrives (or the type before the product). A box drawn by the headline's own component is fine.",
+      "A headline never lies partly over a surface (a window, card or panel) for 0.2 s or longer, where partly means that 5% to 85% of the headline's area is over the surface.",
+    why: "Text that cuts across an interface looks like a layout mistake and makes both the words and the product harder to read. The rule compares each headline with every surface above 25% opacity that covers 2% to 90% of the canvas. A headline inside the surface, and a box drawn by the headline's own component (such as a highlight behind its words), don't count.",
+    fix: "Give the headline its own area of the canvas, or move the surface off screen before the headline appears (or the headline before the surface appears).",
+    options: {
+      seconds: "The shortest overlap, in seconds, that is reported.",
+    },
   },
   check({ film, options, report }) {
     const hits = new Map<
@@ -252,7 +271,7 @@ export const textOverProduct = defineRule({
         const hs = h.at(f)!;
         for (const sEl of surfaces) {
           const ss = sEl.at(f)!;
-          // A backdrop drawn by the type's own component (a highlight behind its words) is part of the type.
+          // A backdrop drawn by the headline's own component (a highlight behind its words) is part of the headline.
           const root = ss.raw.k.split("/").slice(0, -2).join("/");
           const container = film.rows(f).find((r) => r.k === root);
           const own =
@@ -277,8 +296,8 @@ export const textOverProduct = defineRule({
         report({
           element: el,
           frames: [a, b],
-          measured: `"${(el.at(a)!.raw.x ?? "").slice(0, 24)}" overlaps ${other.label} for ${b - a + 1} frames`,
-          need: "type and product never overlapping",
+          measured: `its text "${(el.at(a)!.raw.x ?? "").slice(0, 24)}" partly overlaps ${other.label} for ${b - a + 1} frames`,
+          need: "the headline never partly over a surface",
         });
       }
   },
@@ -291,9 +310,9 @@ export const doubleExposure = defineRule({
   options: {},
   docs: {
     summary:
-      "In a handoff, the outgoing surface is mostly gone before the incoming one is solid.",
-    why: "When two large surfaces are both clearly visible while one fades over the other, the viewer has two subjects at once and takes in neither.",
-    fix: "Fade or move the outgoing surface out faster, or start the incoming one later; or transform one surface into the next instead of crossfading.",
+      "When one surface (a window, card or panel) fades in or out over another, the two are not both above 35% opacity for 3 frames or more.",
+    why: "When two large surfaces are both clearly visible while one fades over the other, the viewer sees two things at once and can take in neither. The rule looks at surfaces that cover 6% to 95% of the canvas, aren't inside one another, and overlap by at least 30% of the smaller one's area. It counts frames where both are above 35% opacity, at least one is below 98%, and at least one changed opacity by more than 0.02 since the previous frame.",
+    fix: "Fade or move the outgoing surface out faster, or start the incoming one later, so one is mostly gone before the other is mostly visible. Alternatively, animate one surface changing into the next instead of crossfading the two.",
   },
   check({ film, report }) {
     const hits: number[] = [];
@@ -332,8 +351,8 @@ export const doubleExposure = defineRule({
       if (b - a >= 2)
         report({
           frames: [a, b],
-          measured: `two overlapping surfaces both above 35% opacity while one fades, for ${b - a + 1} frames`,
-          need: "one solid subject at a time",
+          measured: `two overlapping surfaces are both above 35% opacity while one of them fades, for ${b - a + 1} frames`,
+          need: "only one of the overlapping surfaces above 35% opacity at a time",
         });
   },
 });
@@ -345,17 +364,17 @@ export const topBanner = defineRule({
   options: {},
   docs: {
     summary:
-      "Headlines are part of the composition, not a subtitle strip across the top.",
-    why: "A one-line banner across the top, with the product filling the frame below, looks like a caption added afterwards rather than part of the shot.",
-    fix: "Give the headline its own region beside or around the subject, sized to read at a glance.",
+      "No headline starts in the top 19% of the canvas height while also being wider than 47% of the canvas width.",
+    why: "A wide, single-line headline across the top of the canvas, with the product below it, looks like a subtitle added afterwards rather than part of the design. The rule uses each headline's box in the middle of the time it is fully visible.",
+    fix: "Place the headline in its own area beside or around the main element on screen, or break it onto more lines so it is narrower than 47% of the canvas.",
   },
   check({ film, report }) {
     for (const h of film.headlines())
       if (h.box[1] < 0.19 * film.height && h.box[2] > 0.47 * film.width)
         report({
           frames: [h.from, h.to],
-          measured: `"${h.text.slice(0, 30)}" runs across the top`,
-          need: "headline in its own region of the frame",
+          measured: `the headline "${h.text.slice(0, 30)}" starts in the top 19% of the canvas and is wider than 47% of it`,
+          need: "the headline lower on the canvas, or narrower than 47% of its width",
         });
   },
 });
@@ -367,9 +386,15 @@ export const textHold = defineRule({
   options: { wordsPerSecond: 3.5, minimum: 0.5 },
   docs: {
     summary:
-      "A headline stays fully readable long enough to read: about 3.5 words a second, at least half a second.",
-    why: "The time a line spends animating in doesn't count as reading time. A line that leaves as soon as it has fully appeared is noticed but not read.",
-    fix: "Hold the line longer once it's fully shown, or cut words.",
+      "Each headline stays fully visible for at least 1 second per 3.5 words, and never less than 0.5 s.",
+    why: "Viewers need time to read a line, and the time it spends animating in doesn't count because its words aren't all there yet. A line that leaves as soon as it is fully visible is noticed but not read. The rule measures the time from the first to the last frame in which every letter of the headline is on screen above 95% opacity, and counts words by splitting the text at spaces.",
+    fix: "Keep the line fully visible for longer before it leaves, or use fewer words.",
+    options: {
+      wordsPerSecond:
+        "The assumed reading speed, in words per second. A headline needs its word count divided by this number of seconds.",
+      minimum:
+        "The shortest time, in seconds, any headline must stay fully visible, however few words it has.",
+    },
   },
   check({ film, options, report }) {
     for (const h of film.headlines()) {
@@ -380,8 +405,8 @@ export const textHold = defineRule({
       if (held < need)
         report({
           frames: h.full,
-          measured: `"${h.text.slice(0, 30)}" is fully readable for ${held.toFixed(2)} s`,
-          need: `${need.toFixed(2)} s for ${words} words`,
+          measured: `the headline "${h.text.slice(0, 30)}" is fully visible for ${held.toFixed(2)} s`,
+          need: `at least ${need.toFixed(2)} s fully visible for its ${words} words`,
         });
     }
   },
@@ -393,17 +418,18 @@ export const neverFinishes = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "Every headline fully appears before it leaves.",
-    why: "A line that starts leaving before its last word lands is never read whole.",
-    fix: "Start the exit after the last word has landed and been held.",
+    summary:
+      "Every headline is fully visible, with all its letters on screen above 95% opacity, in at least one frame before it leaves.",
+    why: "A line that starts leaving before its last word has appeared is never seen whole, so it can't be read. Headlines on screen for fewer than 7 frames are not checked.",
+    fix: "Start the headline's exit only after its last word has fully appeared, and keep it fully visible long enough to read (see pace/text-hold).",
   },
   check({ film, report }) {
     for (const h of film.headlines())
       if (!h.full)
         report({
           frames: [h.from, h.to],
-          measured: `"${h.text.slice(0, 30)}" is never fully on screen`,
-          need: "fully shown before it leaves",
+          measured: `the headline "${h.text.slice(0, 30)}" is never fully visible: in no frame are all its letters on screen above 95% opacity`,
+          need: "every letter of the headline on screen above 95% opacity in at least one frame before it leaves",
         });
   },
 });
@@ -415,9 +441,9 @@ export const fadeOnly = defineRule({
   options: {},
   docs: {
     summary:
-      "A surface that arrives or leaves also moves, scales or builds, rather than only fading.",
-    why: "A large surface that only fades in or out while standing still looks unfinished next to the elements that move.",
-    fix: "Give the entrance or exit a small move or scale on the same curve as the fade, or build its contents in.",
+      "A surface (a window, card or panel) that fades in or out also moves at least 6 px or changes its width by at least 4% during the fade, rather than only changing opacity.",
+    why: "A large surface that only fades while standing still looks unfinished next to elements that move. The rule finds each fade in which a surface's opacity rises from 15% or less to 85% or more on consecutive frames (or falls the other way), and compares the surface's position and width at the start and end of the fade. It ignores surfaces that cover 3% of the canvas or less, and when surfaces inside one another fade together it reports only the outermost one.",
+    fix: "Add a small move (6 px or more) or scale (4% or more) to the entrance or exit, with the same timing and easing as the fade.",
   },
   check({ film, report }) {
     const found: {
@@ -457,8 +483,8 @@ export const fadeOnly = defineRule({
         report({
           element: x.el,
           frames: [x.from, x.to],
-          measured: `${x.kind === "appear" ? "appears" : "leaves"} by opacity alone over ${x.to - x.from} frames`,
-          need: "a move, scale or build with the fade",
+          measured: `${x.kind === "appear" ? "fades in" : "fades out"} over ${x.to - x.from} frames without moving or scaling`,
+          need: "a move of at least 6 px or a change in width of at least 4% during the fade",
         });
   },
 });
@@ -499,9 +525,9 @@ export const popIn = defineRule({
   options: {},
   docs: {
     summary:
-      "Content doesn't appear in a single frame on a container that's standing still.",
-    why: "Something that appears at full opacity in one frame looks like a cut rather than the product responding.",
-    fix: "Fade, scale or slide it in over a few frames, or build it with its container.",
+      "An element at least as large as a 70 × 70 px square at 1080p does not appear in a single frame at 80% opacity or more inside a container element that is standing still.",
+    why: "Something that becomes fully visible from one frame to the next while everything around it stays still looks like a jump in the video rather than the product responding. The rule checks each element on the frame it first appears, except cursors and elements already on screen in the film's first frame. It reports the element when it is at 80% opacity or more, its visible area is at least 70 × 70 px at 1080p, and its parent element was already on screen in the previous frame and moved less than 0.5 px.",
+    fix: "Fade, scale or slide the element in over several frames, or bring it in together with its container so they arrive as one.",
   },
   check({ film, report }) {
     for (const el of film.elements) {
@@ -516,8 +542,9 @@ export const popIn = defineRule({
         report({
           element: el,
           frames: [el.first, el.first],
-          measured: "appears at full opacity in one frame",
-          need: "an entrance over a few frames",
+          measured:
+            "appears at 80% opacity or more in a single frame, inside a container that is standing still",
+          need: "an entrance animated over several frames, starting below 80% opacity, or arriving together with its container",
         });
     }
   },
@@ -530,14 +557,19 @@ export const popOut = defineRule({
   options: { size: 70, settle: 0.1 },
   docs: {
     summary:
-      "Content doesn't vanish in a single frame from a container that's standing still.",
-    why: "Something that disappears at full opacity while nothing moves looks like a glitch, because the viewer may have been looking at it and it's suddenly gone.",
-    fix: "Fade, scale or slide it out over a few frames, or let it leave with its container (the window moving off, a cut to the next shot).",
+      "An element at least as large as a 70 × 70 px square at 1080p does not disappear in a single frame while it is at 80% opacity or more and its container element stays on screen and still.",
+    why: "Something that vanishes at full opacity while nothing around it moves looks like a glitch, because the viewer may have been looking at it and it is suddenly gone. The rule checks an element's last frame: it reports it when, over the preceding 0.1 s, it lost no more than 10% opacity and moved or resized by no more than 4 px at 1080p, while its nearest container element stays above 30% opacity and moves less than 0.5 px in the next frame. It skips cursors, elements still on screen at the end of the film, elements replaced within 0.1 s by an identical copy or by new content in the same place, and frames where more than half of the visible elements disappear together, which is a change of scene.",
+    fix: "Fade, scale or slide the element out over several frames, or let it leave together with its container (for example, the window moving off screen, or a change to the next scene).",
+    options: {
+      size: "The side, in px at 1080p, of the smallest square whose area an element must cover to be checked.",
+      settle:
+        "The time, in seconds, before an element's last frame during which it must have stayed still and fully visible for the rule to apply (at least 2 frames). New content that arrives where the element was within this time counts as replacing it.",
+    },
   },
   check({ film, options, report }) {
     const end = film.frames[film.frames.length - 1];
     const settle = Math.max(2, framesIn(film, options.settle));
-    // A cut: most of what's on screen ends in the same frame.
+    // A change of scene: most of what's on screen ends in the same frame.
     const cut = new Map<number, boolean>();
     const isCut = (f: number) => {
       if (!cut.has(f)) {
@@ -569,7 +601,7 @@ export const popOut = defineRule({
           px(film, 4)
       )
         continue;
-      // Handed off: something identical takes its place in the next frame, so nothing visibly changes.
+      // Swapped for an identical copy in the next frame, so nothing visibly changes.
       const twin = film
         .rows(el.last + 1)
         .some(
@@ -609,8 +641,8 @@ export const popOut = defineRule({
       report({
         element: el,
         frames: [el.last, el.last],
-        measured: `disappears at full opacity in one frame while ${owner.label} stays`,
-        need: "an exit over a few frames, or leaving with its container",
+        measured: `disappears in a single frame at 80% opacity or more, while its container ${owner.label} stays on screen and still`,
+        need: "an exit animated over several frames, or leaving together with its container",
       });
     }
   },

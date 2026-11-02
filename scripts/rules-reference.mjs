@@ -34,9 +34,12 @@ for (const [group, rules] of groups) {
     if (Object.keys(r.options).length)
       lines.push(
         "",
-        `**Options:** ${Object.entries(r.options)
-          .map(([k, v]) => `\`${k}\` (default \`${JSON.stringify(v)}\`)`)
-          .join(", ")}`,
+        "| Option | Default | What it controls |",
+        "| ------ | ------- | ---------------- |",
+        ...Object.entries(r.options).map(
+          ([k, v]) =>
+            `| \`${k}\` | \`${JSON.stringify(v)}\` | ${r.docs.options?.[k] ?? ""} |`,
+        ),
       );
   }
 }

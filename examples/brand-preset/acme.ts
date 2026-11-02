@@ -35,8 +35,9 @@ const parse = (c: string): [number, number, number, number] | null => {
 };
 
 /**
- * A shadow is offset or soft. `0 0 0 1px` is a ring (Tailwind draws borders and focus
- * rings this way) and a zero-offset blur of a couple of pixels is a halo, not a shadow.
+ * A shadow is offset or blurred by more than 3 px. `0 0 0 1px` is a ring (Tailwind draws
+ * borders and focus rings this way), and a blur of a few pixels with no offset is a soft
+ * outline, so neither counts as a shadow.
  */
 export const castsShadow = (computed: string) =>
   computed.split(" | ").some((value) =>
@@ -55,9 +56,9 @@ export const noShadows = defineRule({
   options: {},
   docs: {
     summary:
-      "No shadows: surfaces separate by a hairline border or fill contrast.",
-    why: "Acme's look is flat: surfaces are separated by borders and fills, and a shadow makes the film look unlike the product.",
-    fix: "Replace `box-shadow`, `drop-shadow` and `text-shadow` with a 1 px border in the border token, or a fill contrast between the surface and the canvas.",
+      "No visible element has a box, drop or text shadow that is offset from it or blurred by more than 3 px.",
+    why: "Acme's product is flat: it separates surfaces with 1 px borders and background colours, never shadows, so a shadow in the film makes it look unlike the product. The rule checks every element with opacity above 0.3 that is on the canvas, and ignores rings and soft outlines with no offset and a blur of 3 px or less.",
+    fix: "Replace `box-shadow`, `drop-shadow` and `text-shadow` with a 1 px border in the border colour, or give the surface a background colour that differs from the canvas behind it.",
   },
   check({ film, report }) {
     for (const el of film.elements) {
@@ -75,7 +76,7 @@ export const noShadows = defineRule({
           element: el,
           frames: [fs[0], fs[fs.length - 1]],
           measured: "has a shadow",
-          need: "a border or fill contrast instead",
+          need: "a border or a different background colour instead of a shadow",
         });
     }
   },
@@ -87,9 +88,17 @@ export const palette = defineRule({
   severity: "warn",
   options: { colors: ACME_COLOURS, tolerance: 14, minArea: 0.01 },
   docs: {
-    summary: "Surfaces, canvases and headline type use brand colours.",
-    why: "An off-palette fill (a near-miss green, a grey that isn't a token) is visibly off-brand next to the real product.",
-    fix: "Use the colour from the brand's source of truth (its design tokens), not a value from memory or a screenshot.",
+    summary:
+      "The background colour of every surface covering at least 1% of the canvas, and the text colour of every headline, is within a distance of 14 in RGB of one of the brand's colours.",
+    why: "A colour that is close to a brand colour but not the same (a slightly different green, a grey that isn't in the design system) is visible next to the real product. The rule measures the straight-line distance between colours in RGB (each channel 0 to 255) on frames where the element's opacity is at least 0.9, and ignores colours that are almost fully transparent.",
+    fix: "Use the colour from the brand's design tokens, copied from the design system's source files, not a value from memory or a screenshot.",
+    options: {
+      colors: "The brand's colours, as `#rrggbb` or `rgb()`/`rgba()` strings.",
+      tolerance:
+        "How far, as a distance in RGB (each channel 0 to 255), a colour may be from the nearest brand colour.",
+      minArea:
+        "The smallest surface checked, as a share of the canvas area. 0.01 is 1% of the canvas.",
+    },
   },
   check({ film, options, report }) {
     const allowed = options.colors
@@ -123,7 +132,7 @@ export const palette = defineRule({
           element: el,
           frames: [fs[0], fs[fs.length - 1]],
           measured: `uses ${colour}`,
-          need: "a palette colour",
+          need: `one of the brand colours, within a distance of ${options.tolerance} in RGB`,
         });
     }
   },
@@ -136,12 +145,19 @@ export const typeWeight = defineRule({
   options: { headline: 500, any: 600, display: 40 },
   docs: {
     summary:
-      "Type is light: headlines at weight 500 at most, and nothing heavier than 600.",
-    why: "Acme sets its type medium and regular, so bold headlines look heavier than the product they sit next to.",
+      "Headlines and other text at least 40 px tall at 1080p have a font weight of 500 or less, and all other text has a font weight of 600 or less.",
+    why: "Acme's product uses weights 400 and 500, so bold headlines look heavier than the product next to them. The rule checks every visible headline and text element (opacity above 0.3) and reports all the elements that are too heavy in one finding, because the weight is usually set in one place for the whole film.",
     fix: "Set headlines to `fontWeight: 500` and body text to 400. Use 600 only for the product's own interface labels, where the product itself uses it.",
+    options: {
+      headline:
+        "The heaviest font weight allowed for headlines and for text at least `display` px tall.",
+      any: "The heaviest font weight allowed for any other text.",
+      display:
+        "The font size, in px at 1080p, from which text is held to the `headline` weight.",
+    },
   },
   check({ film, options, report }) {
-    // One finding for the film: type weight is a setting, not something each word gets wrong on its own.
+    // One finding for the film: the font weight is usually set in one place, not word by word.
     const heavy: {
       el: (typeof film.elements)[number];
       frame: number;
@@ -172,7 +188,7 @@ export const typeWeight = defineRule({
     report({
       frames: [frames[0], frames[frames.length - 1]],
       measured: `${heavy.length} text elements set at weight ${weights}, e.g. "${examples.slice(0, 50)}"`,
-      need: `headlines and display type at ${options.headline} or lighter, nothing over ${options.any}`,
+      need: `headlines and text at least ${options.display} px tall at weight ${options.headline} or less, and all other text at ${options.any} or less`,
     });
   },
 });
@@ -183,9 +199,14 @@ export const typeface = defineRule({
   severity: "warn",
   options: { headline: ["Inter"] },
   docs: {
-    summary: "Headlines are set in the brand typeface.",
-    why: "A system font or a near-miss sans under the headline reads as someone else's brand.",
-    fix: "Load the brand font with a FontFace (or `@remotion/google-fonts`), hold the render with `delayRender` until it has loaded, and set headlines in it.",
+    summary:
+      "Every headline is set in one of the brand typefaces listed in the `headline` option, judged by its font family on the first frame it appears.",
+    why: "A headline in a system font, or in a typeface that only looks similar to the brand's, makes the film look like another company's. The rule compares the headline's computed font family with the allowed names.",
+    fix: "Load the brand font with a FontFace (or `@remotion/google-fonts`), pause the render with `delayRender` until it has loaded, and set headlines in it.",
+    options: {
+      headline:
+        "The font family names allowed for headlines, as they appear in CSS.",
+    },
   },
   check({ film, options, report }) {
     for (const el of film.elements.filter((e) => e.role === "headline")) {
@@ -195,7 +216,7 @@ export const typeface = defineRule({
           element: el,
           frames: [el.first, el.last],
           measured: `set in ${s.raw.ff}`,
-          need: options.headline.join(" or "),
+          need: `the headline set in ${options.headline.join(" or ")}`,
         });
     }
   },

@@ -41,7 +41,7 @@ const time = (f: Finding) =>
     ? `${f.from.toFixed(2)}s`
     : `${f.from.toFixed(2)}-${f.to.toFixed(2)}s`;
 
-// The columns before a finding's text (time, severity and rule id), and before its "needs" line.
+// The columns before a finding's text (time, severity and rule id), and before its "Required" line.
 const INDENT = 2 + 14 + 1 + 5 + 2 + 28 + 1;
 const NEEDS_INDENT = 2 + 14 + 8;
 
@@ -72,7 +72,7 @@ export const format = (
         `  ${time(f).padEnd(14)} ${sev}  ${cyan(f.rule.padEnd(28))} ${first}`,
         ...rest.map((l) => `${" ".repeat(NEEDS_INDENT)}${l}`),
       );
-      const needs = `needs ${f.need}.${f.accepted ? ` Accepted: ${f.accepted}` : ` Fix: ${f.fix}`}`;
+      const needs = `Required: ${f.need}.${f.accepted ? ` Accepted: ${f.accepted}` : ` Fix: ${f.fix}`}`;
       lines.push(
         ...wrap(needs, NEEDS_INDENT, columns).map((l) =>
           dim(`${" ".repeat(NEEDS_INDENT)}${l}`),

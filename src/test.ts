@@ -1,5 +1,6 @@
 /**
- * The test API: the author writes down what each beat means, and the film is held to it.
+ * The test API: the author writes down what each section of the film is meant to show, and
+ * the tests check the film against it.
  *
  *   import { describe, expect, loadFilm, test } from "mographc/test";
  *   const film = await loadFilm("Launch");
@@ -95,7 +96,7 @@ const matchers = {
     return result(
       !missing.length,
       `expected ${name(el)} not to be visible`,
-      `expected ${name(el)} to be visible, but it isn't at ${missing
+      `expected ${name(el)} to be visible (opacity above 0.3 and partly on the canvas), but it isn't at ${missing
         .slice(0, 3)
         .map((f) => sec(el, f))
         .join(", ")}`,
@@ -106,7 +107,7 @@ const matchers = {
     return result(
       !seen.length,
       `expected ${name(el)} to be visible`,
-      `expected ${name(el)} to be hidden, but it's visible at ${seen
+      `expected ${name(el)} to be hidden, but it's visible (opacity above 0.3 and partly on the canvas) at ${seen
         .slice(0, 3)
         .map((f) => sec(el, f))
         .join(", ")}`,
@@ -125,14 +126,14 @@ const matchers = {
       return result(
         false,
         "",
-        `${name(el)}${s ? "" : " isn't on screen"}${box ? "" : " / the target isn't on screen"} at ${sec(el, f)}`,
+        `expected ${name(el)} to point at the target at ${sec(el, f)}, but ${!s && !box ? "neither of them is" : s ? "the target isn't" : "it isn't"} on screen then`,
       );
     const p = tipOf(s);
     const pass = inside(p, box, when.tolerance ?? 0);
     return result(
       pass,
       `expected ${name(el)} not to point at the target at ${sec(el, f)}`,
-      `expected ${name(el)} to point at ${Array.isArray(target) ? "the box" : name(target)} at ${sec(el, f)}; its tip is at (${p.x.toFixed(0)}, ${p.y.toFixed(0)}), the target spans x ${box[0].toFixed(0)}-${(box[0] + box[2]).toFixed(0)}, y ${box[1].toFixed(0)}-${(box[1] + box[3]).toFixed(0)}`,
+      `expected ${name(el)} to point at ${Array.isArray(target) ? "the box" : name(target)} at ${sec(el, f)}; its tip is at (${p.x.toFixed(0)}, ${p.y.toFixed(0)}) px, and the target spans x ${box[0].toFixed(0)}-${(box[0] + box[2]).toFixed(0)}, y ${box[1].toFixed(0)}-${(box[1] + box[3]).toFixed(0)}`,
     );
   },
   toLandAt(
@@ -143,13 +144,17 @@ const matchers = {
     const f = Math.round(when.at * el.film.fps);
     const s = el.at(f);
     if (!s)
-      return result(false, "", `${name(el)} isn't on screen at ${sec(el, f)}`);
+      return result(
+        false,
+        "",
+        `expected ${name(el)} to be on screen at ${sec(el, f)}, but it isn't`,
+      );
     const c = centreOf(s);
     const d = Math.hypot(c.x - point.x, c.y - point.y);
     return result(
       d <= (when.tolerance ?? 8),
       `expected ${name(el)} not to land at (${point.x}, ${point.y})`,
-      `expected ${name(el)} centred at (${point.x}, ${point.y}) at ${sec(el, f)}, but it's at (${c.x.toFixed(0)}, ${c.y.toFixed(0)}), ${d.toFixed(0)} px away`,
+      `expected ${name(el)} to be centred at (${point.x}, ${point.y}) px at ${sec(el, f)}, but its centre is at (${c.x.toFixed(0)}, ${c.y.toFixed(0)}), ${d.toFixed(0)} px away`,
     );
   },
   toOverlap(el: Element, other: Element, when?: Time) {
@@ -192,8 +197,8 @@ const matchers = {
     });
     return result(
       !out.length,
-      `expected ${name(el)} to leave the region`,
-      `expected ${name(el)} inside the ${region === "safe-area" ? "safe area" : "box"}, but it's outside at ${out
+      `expected ${name(el)} to go outside the ${region === "safe-area" ? "safe area" : "box"}`,
+      `expected ${name(el)} to stay inside the ${region === "safe-area" ? "safe area (the central 90% of the canvas)" : "box"}, but part of it is outside at ${out
         .slice(0, 3)
         .map((f) => sec(el, f))
         .join(", ")}`,
@@ -234,8 +239,8 @@ const matchers = {
     );
     return result(
       !jumps.length,
-      `expected ${name(el)} to jump`,
-      `expected ${name(el)} to move continuously, but it jumps ${jumps.map((f) => `${el.step(f).toFixed(0)} px at ${sec(el, f)}`).join(", ")}`,
+      `expected ${name(el)} to jump somewhere`,
+      `expected ${name(el)} to move without jumping, but it moves ${jumps.map((f) => `${el.step(f).toFixed(0)} px in one frame at ${sec(el, f)}`).join(", ")}`,
     );
   },
   /** Every move that lands in the window eases out as strongly as its length needs. */
@@ -253,8 +258,8 @@ const matchers = {
       .filter((m) => m.easeOut < needOut(m.seconds));
     return result(
       !weak.length,
-      `expected ${name(el)} not to ease out`,
-      `expected ${name(el)} to ease out, but ${weak.map((m) => `its move at ${sec(el, m.from)} has ease-out ${m.easeOut.toFixed(2)} (needs ${needOut(m.seconds)})`).join("; ")}`,
+      `expected ${name(el)} not to slow down at the end of its moves`,
+      `expected ${name(el)} to slow down at the end of each move, but ${weak.map((m) => `its move at ${sec(el, m.from)} has an ease-out strength of ${m.easeOut.toFixed(2)}, below the ${needOut(m.seconds)} a ${m.seconds.toFixed(2)} s move needs`).join("; ")} (ease-out strength is the share of the move's time spent on its last 20% of distance)`,
     );
   },
   /** It's gone by this time, and it left by moving off the canvas. */
@@ -266,7 +271,7 @@ const matchers = {
     return result(
       pass,
       `expected ${name(el)} not to leave the canvas by ${when.by} s`,
-      `expected ${name(el)} to leave the canvas by ${when.by} s, but it ${el.last > by ? `is still on screen at ${sec(el, el.last)}` : `disappears on screen at (${c.x.toFixed(0)}, ${c.y.toFixed(0)})`}`,
+      `expected ${name(el)} to leave the canvas by ${when.by} s, but it ${el.last > by ? `is still on screen at ${sec(el, el.last)}` : `disappears while still on the canvas, at (${c.x.toFixed(0)}, ${c.y.toFixed(0)}) px`}`,
     );
   },
   /** First fully visible within `within` seconds of a time. */
@@ -277,7 +282,7 @@ const matchers = {
     return result(
       pass,
       `expected ${name(el)} not to appear at ${time} s`,
-      `expected ${name(el)} to appear at ${time} s, but it ${t === undefined ? "never appears" : `appears at ${t.toFixed(2)} s`}`,
+      `expected ${name(el)} to become fully visible (opacity above 0.5) at ${time} s, but it ${t === undefined ? "never does" : `does at ${t.toFixed(2)} s`}`,
     );
   },
   /** On screen and still for at least this long, from a time (or anywhere). */
@@ -292,8 +297,8 @@ const matchers = {
     }
     return result(
       best / fps >= opts.seconds,
-      `expected ${name(el)} not to hold ${opts.seconds} s`,
-      `expected ${name(el)} to hold still on screen for ${opts.seconds} s, but its longest hold is ${(best / fps).toFixed(2)} s`,
+      `expected ${name(el)} not to stay still and visible for ${opts.seconds} s`,
+      `expected ${name(el)} to stay still and visible for ${opts.seconds} s, but the longest it does is ${(best / fps).toFixed(2)} s`,
     );
   },
   toPrecede(el: Element, other: Element) {
@@ -303,7 +308,7 @@ const matchers = {
     return result(
       pass,
       `expected ${name(el)} not to come before ${name(other)}`,
-      `expected ${name(el)} before ${name(other)}, but they appear at ${a === undefined ? "never" : sec(el, a)} and ${b === undefined ? "never" : sec(el, b)}`,
+      `expected ${name(el)} to appear before ${name(other)}, but ${name(el)} first appears ${a === undefined ? "never" : `at ${sec(el, a)}`} and ${name(other)} ${b === undefined ? "never" : `at ${sec(el, b)}`}`,
     );
   },
   /** The simulated viewer is looking at it for most of the window (by default 60% of it). */
@@ -328,8 +333,8 @@ const matchers = {
     const top = [...elsewhere].sort((a, b) => b[1] - a[1])[0]?.[0];
     return result(
       share >= need,
-      `expected the viewer not to be looking at ${name(el)}`,
-      `expected the viewer to be looking at ${name(el)} ${(need * 100).toFixed(0)}% of the time, but it's ${(share * 100).toFixed(0)}%${top ? `; the eye is mostly on ${top}` : ""}`,
+      `expected the simulated viewer not to be looking at ${name(el)}`,
+      `expected the simulated viewer to be looking at ${name(el)} for ${(need * 100).toFixed(0)}% of the time, but it is for ${(share * 100).toFixed(0)}%${top ? `; the rest of the time it mostly looks at ${top}` : ""}`,
     );
   },
   /** A viewer finishes reading the text in it before it leaves. */
@@ -349,8 +354,8 @@ const matchers = {
       !!mine.length && !missed.length,
       `expected some text in ${name(el)} to go unread`,
       mine.length
-        ? `expected the text in ${name(el)} to be read, but ${missed.map((r) => `"${r.full.slice(0, 30)}" leaves at ${sec(el, r.to)} with ${Math.round(r.words - r.read)} of ${Math.round(r.words)} words unread`).join("; ")}`
-        : `${name(el)} has no legible text`,
+        ? `expected the simulated viewer to finish reading the text in ${name(el)}, but ${missed.map((r) => `"${r.full.slice(0, 30)}" leaves at ${sec(el, r.to)} with ${Math.round(r.words - r.read)} of ${Math.round(r.words)} words unread`).join("; ")}`
+        : `expected the simulated viewer to read the text in ${name(el)}, but it has no text large and visible enough to read`,
     );
   },
   /** The whole film passes the compiler and the project's lint config. */
@@ -362,7 +367,7 @@ const matchers = {
     const errors = failing(findings);
     return result(
       !errors.length,
-      "expected lint errors",
+      "expected the film to have lint errors",
       // Printed indented under the test name, so it wraps 6 columns sooner.
       format(errors, { warnings: false, columns: width && width - 6 }),
     );
@@ -382,7 +387,7 @@ const guarded = Object.fromEntries(
         return {
           pass: false,
           message: () =>
-            `${name}: expected an element (from film.get or film.find) but got ${String(received)}; run \`mographc elements\` to see what's there`,
+            `${name}: expected an element (from film.get or film.find), but got ${String(received)}. Run \`mographc elements\` to list the elements in the film.`,
         };
       return (fn as (...a: unknown[]) => unknown).call(this, received, ...args);
     },

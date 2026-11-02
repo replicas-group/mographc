@@ -93,12 +93,12 @@ export const loadConfig = async (
   const config = (mod.default ?? mod.config) as Config;
   if (!Array.isArray(config))
     throw new Error(
-      `${found} must export default an array of config blocks (use defineConfig([...])).`,
+      `${found} must have a default export that is an array of config blocks. Wrap it in defineConfig([...]).`,
     );
   for (const b of config)
     if (b.between && !b.reason)
       throw new Error(
-        `${found}: a block with "between" needs a "reason" (why the rule doesn't apply there).`,
+        `${found}: a config block with "between" must also have a "reason" that explains why the rules don't apply during that time.`,
       );
   return { config, file: found };
 };
@@ -125,7 +125,7 @@ export const resolve = (config: Config, composition: string) => {
       const rule = available.get(id);
       if (!rule)
         throw new Error(
-          `Unknown rule "${id}"${b.name ? ` in "${b.name}"` : ""}. Add the plugin that defines it, or run \`mographc rules\`.`,
+          `Unknown rule "${id}"${b.name ? ` in "${b.name}"` : ""}. If it's a custom rule, add it to a config block's "plugins". Run \`mographc rules\` to list the built-in rules.`,
         );
       const [severity, options] = Array.isArray(setting) ? setting : [setting];
       const prev = out.get(id);

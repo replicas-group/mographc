@@ -39,9 +39,9 @@ export const linear = defineRule({
   options: {},
   docs: {
     summary:
-      "A move that comes to rest eases in and out instead of travelling at constant speed.",
-    why: "Physical objects speed up and slow down, so a window or card that moves at constant speed and stops at full speed looks mechanical.",
-    fix: "Drive the move with an eased curve (ease-in-out for a move between two rest points; ease-out for something arriving fast), not `interpolate` with no `easing`.",
+      "A move that ends on the canvas speeds up at its start or slows down at its end: its ease-in or its ease-out is at least 0.24, where 0.20 means constant speed.",
+    why: "Real objects speed up and slow down, so a window or card that travels at one constant speed and stops at full speed looks mechanical. The ease-in is the share of the move's time spent covering its first 20% of distance, and the ease-out the share spent on its last 20%; both are 0.20 at constant speed. The rule checks moves of at least 0.2 s and 60 px at 1080p that end with the element still on the canvas, ignoring cursors and elements carried along by a moving parent.",
+    fix: "Drive the move with an easing curve instead of `interpolate` with no `easing`: use ease-in-out for a move between two positions where the element is still, and ease-out for an element that arrives fast from off the canvas.",
   },
   check({ film, report }) {
     for (const el of movers(film))
@@ -50,8 +50,8 @@ export const linear = defineRule({
           report({
             element: el,
             frames: [m.from, m.to],
-            measured: `ease-in ${m.easeIn.toFixed(2)}, ease-out ${m.easeOut.toFixed(2)} over ${m.seconds.toFixed(2)} s (linear is 0.20)`,
-            need: "both above 0.24",
+            measured: `moves at nearly constant speed, with an ease-in of ${m.easeIn.toFixed(2)} and an ease-out of ${m.easeOut.toFixed(2)} over ${m.seconds.toFixed(2)} s (constant speed gives 0.20)`,
+            need: "an ease-in or an ease-out of at least 0.24",
           });
   },
 });
@@ -70,9 +70,21 @@ export const weakOut = defineRule({
   },
   docs: {
     summary:
-      "The longer a move is, the more strongly it slows down at the end. A short flick needs little ease-out.",
-    why: "A move that lasts a second but barely slows down at the end looks like it hits a wall. The rule measures the share of the move's time spent covering its last 20% of distance (0.20 for constant speed).",
-    fix: "Use a stronger ease-out (e.g. a bezier ending around (0.1, 1) or (0.2, 1)), or lengthen the move's settle. Below the floor it's an error; between the floor and the target it's a warning.",
+      "A move that ends on the canvas has an ease-out of at least 0.40 if it lasts 0.8 s or more, 0.33 if it lasts 0.4 to 0.8 s, and 0.26 if it is shorter, where 0.20 means constant speed.",
+    why: "A long move that barely slows down before it stops looks as if it was stopped by force rather than coming to rest, while a very short move needs little slowing down to look natural. The ease-out is the share of the move's time spent covering its last 20% of distance. Below the target the finding is a warning; below a lower minimum (0.30, 0.26 and 0.22 for the same three durations) it is an error. Moves at nearly constant speed are reported by `easing/linear` instead.",
+    fix: "Use a stronger ease-out curve, for example a cubic bezier whose last control point is around (0.1, 1) or (0.2, 1), or give the move more time to slow down at its end.",
+    options: {
+      long: "The ease-out required for a move lasting 0.8 s or more (a share of the move's time, 0.20 being constant speed).",
+      medium:
+        "The ease-out required for a move lasting at least 0.4 s and under 0.8 s.",
+      short: "The ease-out required for a move lasting under 0.4 s.",
+      floorLong:
+        "For a move lasting 0.8 s or more, the ease-out below which the finding is an error rather than a warning.",
+      floorMedium:
+        "For a move lasting at least 0.4 s and under 0.8 s, the ease-out below which the finding is an error rather than a warning.",
+      floorShort:
+        "For a move lasting under 0.4 s, the ease-out below which the finding is an error rather than a warning.",
+    },
   },
   check({ film, options, report }) {
     for (const el of movers(film))
@@ -92,8 +104,8 @@ export const weakOut = defineRule({
         report({
           element: el,
           frames: [m.from, m.to],
-          measured: `ease-out ${m.easeOut.toFixed(2)} over a ${m.seconds.toFixed(2)} s move of ${m.distance.toFixed(0)} px${m.easeOut >= floor ? " (could be stronger)" : ""}`,
-          need: `>= ${need.toFixed(2)}`,
+          measured: `has an ease-out of ${m.easeOut.toFixed(2)} on a ${m.seconds.toFixed(2)} s move of ${m.distance.toFixed(0)} px${m.easeOut >= floor ? " (above the error minimum, so this is a warning)" : ""}`,
+          need: `an ease-out of at least ${need.toFixed(2)} for a move of this duration`,
           severity: m.easeOut >= floor ? "warn" : "error",
         });
       }
@@ -106,9 +118,10 @@ export const noEaseIn = defineRule({
   severity: "warn",
   options: {},
   docs: {
-    summary: "A slow move that starts from rest on screen eases in.",
-    why: "An object that goes from standing still to full speed at once looks as if it was kicked. A fast start is only right when the start is hidden (the object enters from off screen) or the move is a quick flick.",
-    fix: "Use ease-in-out instead of ease-out for moves that start visibly at rest.",
+    summary:
+      "A move that starts on the canvas, ends on the canvas, lasts at least 0.4 s and averages under 750 px/s has an ease-in of at least 0.12.",
+    why: "An element that goes from standing still to full speed in a single frame looks as if it was struck. Starting at full speed is acceptable when the viewer can't see the start (the element enters from off the canvas) or when the move is fast. The ease-in is the share of the move's time spent covering its first 20% of distance; it is 0.20 at constant speed and near 0 when the move starts at full speed.",
+    fix: "Use an ease-in-out curve instead of an ease-out curve for a move that starts where the viewer can see the element standing still.",
   },
   check({ film, report }) {
     for (const el of movers(film))
@@ -125,8 +138,8 @@ export const noEaseIn = defineRule({
           report({
             element: el,
             frames: [m.from, m.to],
-            measured: `ease-in ${m.easeIn.toFixed(2)} at ${speed.toFixed(0)} px/s`,
-            need: ">= 0.12",
+            measured: `starts at full speed, with an ease-in of ${m.easeIn.toFixed(2)} on a move averaging ${speed.toFixed(0)} px/s`,
+            need: "an ease-in of at least 0.12",
           });
       }
   },
@@ -138,9 +151,10 @@ export const abruptStop = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "A move slows down before it stops.",
-    why: "If the last frames of a move are as fast as the frames before them, the object stops suddenly, as if it hit something.",
-    fix: "End the move on an ease-out. Check that the move isn't cut short by a range that ends before its curve finishes.",
+    summary:
+      "A move that ends on the canvas is slower than 120 px/s on its last moving frame, or at most 60% of its speed three moving frames earlier.",
+    why: "If the last frames of a move are as fast as the frames before them, the element stops all at once, as if it hit something. The rule compares the speed on the last frame where the element moves at least 1 px with its speed three such frames earlier.",
+    fix: "End the move with an ease-out curve. Also check that the move isn't cut short: an `interpolate` input range or a `Sequence` that ends before the easing curve reaches its end stops the element at full speed.",
   },
   check({ film, report }) {
     const fast = perFrame(film, 120);
@@ -154,8 +168,8 @@ export const abruptStop = defineRule({
           report({
             element: el,
             frames: [m.from, m.to],
-            measured: `stops from ${(last * film.fps).toFixed(0)} px/s (3 frames earlier: ${(before * film.fps).toFixed(0)} px/s)`,
-            need: "decelerating into rest",
+            measured: `stops straight from ${(last * film.fps).toFixed(0)} px/s, after moving at ${(before * film.fps).toFixed(0)} px/s three frames earlier`,
+            need: "a last-frame speed under 120 px/s or at most 60% of the speed three frames earlier",
           });
       }
   },
@@ -167,9 +181,10 @@ export const stutter = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "A move is one continuous curve, with no stall in the middle.",
-    why: "When the speed drops to almost zero in the middle of a move, the move looks like it hesitates. This usually means two animations are chained or added together (a layout change, then a transform; two ramps that don't overlap).",
-    fix: "Drive the whole motion from one progress value, or overlap the two animations so the speed never collapses between them.",
+    summary:
+      "During a move, the speed on any one frame never drops below 35% of the slower of the frames on either side when both of those are moving at 450 px/s or more.",
+    why: "When the speed drops almost to zero for a frame in the middle of a fast move, the element looks like it hesitates. This usually means two animations run one after the other or are added together, for example a layout change followed by a transform, or two `interpolate` ranges that meet without overlapping.",
+    fix: "Drive the whole motion from one progress value, or overlap the two animations so the speed never drops between them.",
   },
   check({ film, report }) {
     const quick = perFrame(film, 450);
@@ -182,8 +197,8 @@ export const stutter = defineRule({
             report({
               element: el,
               frames: [m.from, m.to],
-              measured: `speed ${(s[i - 1] * film.fps).toFixed(0)} → ${(s[i] * film.fps).toFixed(0)} → ${(s[i + 1] * film.fps).toFixed(0)} px/s at ${t(film, m.from + i + 1)}`,
-              need: "one continuous curve",
+              measured: `nearly stops in the middle of a move: its speed goes ${(s[i - 1] * film.fps).toFixed(0)} → ${(s[i] * film.fps).toFixed(0)} → ${(s[i + 1] * film.fps).toFixed(0)} px/s over three frames at ${t(film, m.from + i + 1)}`,
+              need: "no frame slower than 35% of the frames on either side when both move at 450 px/s or more",
             });
             break;
           }
@@ -198,9 +213,10 @@ export const edgeReversal = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "Every edge of a moving surface travels one way, then settles.",
-    why: "When a surface's scale and its layout change together, an edge can swell past where it lands and come back, or wind up against its travel. The result looks like a wobble that isn't in the easing curve.",
-    fix: "Ease the surface's on-screen rectangle itself (x, y, width, height on one curve) and derive scale or clipping from it, instead of easing scale and size separately.",
+    summary:
+      "When a surface (a window, card or panel) covering at least 3% of the canvas moves, each of its edges that travels 40 px or more at 1080p never moves backwards by more than 12 px at 1080p or 3% of its travel, whichever is larger.",
+    why: "When a surface's scale and its layout size are animated separately, an edge can first move the opposite way to its travel, or go past its final position and come back. The viewer sees a wobble that isn't in the easing curve. The rule follows the left, right, top and bottom edges of the surface's visible rectangle through each move of at least 0.2 s and 60 px at 1080p, and measures the largest distance an edge moves back against its overall direction.",
+    fix: "Animate the surface's on-screen rectangle itself (x, y, width and height on one easing curve) and compute any scale or clipping from it, instead of easing scale and size separately.",
   },
   check({ film, report }) {
     for (const el of film.elements.filter((e) => e.role === "surface"))
@@ -234,8 +250,8 @@ export const edgeReversal = defineRule({
             const kind =
               along[0] - Math.min(...along) >=
               Math.max(...along) - along[along.length - 1]
-                ? "winds up against its travel"
-                : "overshoots its landing and comes back";
+                ? "first moves the opposite way to its travel"
+                : "goes past its final position and comes back";
             worst = [
               against,
               `the ${name} edge ${kind} by ${against.toFixed(0)} px`,
@@ -247,7 +263,7 @@ export const edgeReversal = defineRule({
             element: el,
             frames: [m.from, m.to],
             measured: worst[1],
-            need: "every edge moving one way",
+            need: "every edge moves in one direction, going back by no more than 12 px at 1080p or 3% of its travel",
           });
       }
   },
@@ -262,9 +278,16 @@ export const cursorStretch = defineRule({
   severity: "error",
   options: { speed: 900, stretch: 1.06 },
   docs: {
-    summary: "A cursor moving fast stretches along its travel.",
-    why: "Stretching a fast object along its direction of travel (squash and stretch, a standard animation technique) makes it look like it has weight. Without it, a fast cursor looks stiff.",
-    fix: "Scale the cursor along its direction of travel in proportion to its speed (for example `1 + min(0.22, speed / 300)` per frame, smoothed), rotated to the travel angle.",
+    summary:
+      "On frames where a cursor moves at 900 px/s or more, it is stretched to at least 1.06 along its direction of travel, on at least half of those frames.",
+    why: "Stretching a fast-moving object along its direction of travel is a standard animation technique (squash and stretch) that makes the object look like it has mass and speed. Without it, a fast cursor looks rigid. Stretch is the cursor's long side divided by its short side after all its transforms. The rule reports a cursor when at least 3 of its fast frames, and at least half of them, are stretched less than the threshold.",
+    fix: "Scale the cursor along its direction of travel in proportion to its speed, rotated to the angle of travel, and smooth the scale over a few frames. For example, scale it by `1 + min(0.22, speed / 300)`.",
+    options: {
+      speed:
+        "The speed, in px/s, at or above which a frame counts as fast and the cursor must be stretched.",
+      stretch:
+        "The minimum stretch (long side divided by short side) required on a fast frame.",
+    },
   },
   check({ film, options, report }) {
     for (const el of cursors(film)) {
@@ -280,8 +303,8 @@ export const cursorStretch = defineRule({
         report({
           element: el,
           frames: [flat[0], flat[flat.length - 1]],
-          measured: `${flat.length} of ${fast.length} fast frames (>= ${options.speed} px/s) stretch under ${options.stretch}`,
-          need: "stretch with speed",
+          measured: `is stretched less than ${options.stretch} on ${flat.length} of its ${fast.length} frames moving at ${options.speed} px/s or more`,
+          need: `a stretch of at least ${options.stretch} on more than half of the frames where the cursor moves at ${options.speed} px/s or more`,
         });
     }
   },
@@ -294,9 +317,9 @@ export const deadExit = defineRule({
   options: {},
   docs: {
     summary:
-      "A cursor leaves by moving off the canvas, not by fading where it stands.",
-    why: "A cursor that fades out or vanishes where it stands ends its motion abruptly. Moving it off the canvas completes the motion and shows the viewer where it went.",
-    fix: "After its last action, fling the cursor off the nearest edge (a short, fast, eased-in move) instead of fading it.",
+      "A cursor that disappears more than one frame before the film ends has its centre outside the canvas on its last frame, so it leaves past an edge.",
+    why: "A cursor that fades out or vanishes in the middle of the canvas ends its motion abruptly, and the viewer doesn't see where it went. Moving it off the edge of the canvas completes the motion, the way a person moves a mouse away.",
+    fix: "After the cursor's last click, move it off the nearest edge of the canvas with a short, fast move that eases in, instead of fading it out.",
   },
   check({ film, report }) {
     for (const el of cursors(film)) {
@@ -307,8 +330,8 @@ export const deadExit = defineRule({
       report({
         element: el,
         frames: [Math.max(el.first, last - Math.round(film.fps * 0.3)), last],
-        measured: `it disappears on screen, at ${(el.step(last) * film.fps).toFixed(0)} px/s`,
-        need: "leave by moving off the canvas",
+        measured: `disappears while still on the canvas, moving at ${(el.step(last) * film.fps).toFixed(0)} px/s on its last frame`,
+        need: "the cursor leaves by moving past the edge of the canvas",
       });
     }
   },
@@ -320,9 +343,10 @@ export const popsIn = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "A cursor enters from off the canvas.",
-    why: "A cursor that appears in the middle of the frame looks like a cut. Entering from the edge shows it arriving, the way it would when a person moves a mouse.",
-    fix: "Start the cursor's path off the canvas edge nearest its first target.",
+    summary:
+      "A cursor that first appears after the film's first frame has its centre outside the canvas on that frame, so it enters from an edge.",
+    why: "A cursor that suddenly appears in the middle of the canvas looks like a jump in the video. Entering from an edge shows it arriving, the way it does when a person moves a mouse onto the screen.",
+    fix: "Start the cursor's path outside the canvas, past the edge nearest its first target, and move it in.",
   },
   check({ film, report }) {
     for (const el of cursors(film)) {
@@ -331,8 +355,8 @@ export const popsIn = defineRule({
         report({
           element: el,
           frames: [el.first, el.first],
-          measured: `appears on screen${first.opacity < 0.5 ? ", fading in" : ""}`,
-          need: "enter from off the canvas",
+          measured: `first appears inside the canvas${first.opacity < 0.5 ? ", fading in" : ""}`,
+          need: "the cursor enters by moving in from past the edge of the canvas",
         });
     }
   },
@@ -345,22 +369,28 @@ export const harshSettle = defineRule({
   options: { warnAbove: 18000, errorAbove: 27000 },
   docs: {
     summary:
-      "A surface slows down gently as it lands, however far it travelled.",
-    why: "A bubble or card that crosses the frame in a third of a second has to lose all that speed in a few frames, so it looks like it hits a wall even on an ease-out curve. Viewers read the time an object takes to stop as its weight, and only a cursor is light enough to stop that quickly. Measured as the peak deceleration while it lands, in px/s² at 1080p.",
-    fix: "Give the move more time (duration grows with distance: a half-screen move wants 0.6–0.9 s), or a shorter path, or a curve with a longer tail (e.g. bezier(0.16, 1, 0.3, 1) over more frames).",
+      "An element other than a cursor or text that starts a move on the canvas and stops on the canvas slows down by no more than 18,000 px/s² at 1080p after reaching its top speed (an error above 27,000 px/s²).",
+    why: "A card that crosses the canvas in a third of a second has to lose all that speed in a few frames, so it stops abruptly even on an ease-out curve. Viewers judge an object's mass by how long it takes to stop, and only a cursor is light enough to stop that quickly. The rule averages the element's speed over about a fifteenth of a second and measures the largest drop in speed per second after the peak, in px/s² at 1080p. Moves that start off the canvas and elements smaller than 0.2% of the canvas are not checked, because the viewer doesn't see the whole move.",
+    fix: "Give the move more time (a move across half the canvas needs about 0.6 to 0.9 s), shorten its path, or use an easing curve that spends longer slowing down, such as a cubic bezier (0.16, 1, 0.3, 1) over more frames.",
+    options: {
+      warnAbove:
+        "The deceleration, in px/s² at 1080p, above which the rule reports a warning.",
+      errorAbove:
+        "The deceleration, in px/s² at 1080p, above which the finding is an error instead of a warning.",
+    },
   },
   check({ film, options, report }) {
     const scale = 1080 / film.height;
     // Speeds averaged over about a fifteenth of a second, so a film rendered at 60 fps from
-    // 30 fps keys (every other frame a repeat) doesn't read as braking on every frame.
+    // 30 fps keys (every other frame a repeat) doesn't measure as braking on every frame.
     const w = Math.max(1, Math.round(film.fps / 15));
     for (const el of movers(film).filter(
       (e) => e.role !== "text" && e.role !== "headline" && e.role !== "label",
     ))
       for (const m of judged(el)) {
         const s0 = el.at(m.from)!;
-        // An entrance from off screen can arrive fast: the eye never sees it start. Hard braking
-        // reads as a wall when the whole trip happens in view.
+        // An entrance from off the canvas can arrive fast: the eye never sees it start. Hard
+        // braking only looks abrupt when the whole move happens in view.
         if (
           !m.lands ||
           !film.onCanvas(s0) ||
@@ -383,8 +413,8 @@ export const harshSettle = defineRule({
         report({
           element: el,
           frames: [m.from, m.to],
-          measured: `brakes at ${Math.round(worst / 1000)}k px/s² landing a ${m.distance.toFixed(0)} px move in ${m.seconds.toFixed(2)} s`,
-          need: `under ${options.warnAbove / 1000}k px/s²`,
+          measured: `slows down at up to ${Math.round(worst / 1000)}k px/s² at 1080p while stopping a ${m.distance.toFixed(0)} px move that takes ${m.seconds.toFixed(2)} s`,
+          need: `a deceleration of at most ${options.warnAbove / 1000}k px/s² at 1080p`,
           severity: worst > options.errorAbove ? "error" : "warn",
         });
       }
@@ -397,9 +427,16 @@ export const cursorContrast = defineRule({
   severity: "error",
   options: { ratio: 1.6, seconds: 0.1 },
   docs: {
-    summary: "A cursor always stands out from what it's over.",
-    why: "A cursor the same colour as the bar, button or chip under it disappears at the moment it matters most, when it points at something.",
-    fix: "Change what's under the cursor (a different colour for the hovered element, or a hover state that lightens it), or point at a different spot. Keep the cursor's own colour, because the viewer recognises it by that colour throughout the film.",
+    summary:
+      "A cursor never spends 0.1 s or longer over a background whose WCAG contrast ratio with the cursor's fill, outline and drop shadow is below 1.6:1.",
+    why: "A cursor the same colour as the bar, button or card under it disappears at the moment it matters most, when it points at something. On each frame where the cursor is at least 50% opaque, the rule takes the topmost background colour under the cursor's tip (or under a point 30% in from its top-left corner when it has no tip) and computes the WCAG contrast ratio with the cursor's fill. An outline or drop shadow that meets the ratio is enough.",
+    fix: "Change what's under the cursor (give the hovered element a different colour, or a hover state that lightens it), or point at a different spot. Keep the cursor's own colour, because the viewer recognises the cursor by that colour throughout the film.",
+    options: {
+      ratio:
+        "The minimum WCAG contrast ratio between the cursor and the background under it (1 means identical colours, 21 is black on white).",
+      seconds:
+        "How long, in seconds, the contrast must stay below the ratio before the rule reports it.",
+    },
   },
   check({ film, options, report }) {
     for (const el of film.elements.filter((e) => e.role === "cursor")) {
@@ -461,8 +498,8 @@ export const cursorContrast = defineRule({
           report({
             element: el,
             frames: [a, b],
-            measured: `it blends into what it's over (${what})`,
-            need: `contrast of at least ${options.ratio}:1`,
+            measured: `has too little contrast with the background under it (${what})`,
+            need: `a contrast ratio of at least ${options.ratio}:1 between the cursor and the background under it`,
           });
     }
   },

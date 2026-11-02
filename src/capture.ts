@@ -50,7 +50,7 @@ export const findProject = async (
     const up = path.dirname(dir);
     if (up === dir)
       throw new Error(
-        `No Remotion project found from ${from}: no package.json depends on "remotion".`,
+        `No Remotion project found: no package.json in ${from} or the folders above it lists "remotion" as a dependency.`,
       );
     dir = up;
   }
@@ -81,7 +81,7 @@ export const findProject = async (
     ENTRY_CANDIDATES.find((c) => existsSync(path.join(dir, c)));
   if (!resolved)
     throw new Error(
-      `No entry point found in ${dir}. Pass --entry (looked for ${ENTRY_CANDIDATES.join(", ")}).`,
+      `No Remotion entry point found in ${dir}. mographc looked for ${ENTRY_CANDIDATES.join(", ")}. Pass the file with --entry.`,
     );
   return {
     root: dir,
@@ -106,7 +106,7 @@ const resolveRemotion = (project: Project, name: string) => {
       ).resolve(name);
     } catch {
       throw new Error(
-        `Can't find ${name} in ${project.root}. Install @remotion/cli (it brings ${name}).`,
+        `Can't find ${name} in ${project.root}. Install @remotion/cli, which includes it.`,
       );
     }
   }
@@ -202,7 +202,7 @@ export const capture = async (
         const c = all.find((x: { id: string }) => x.id === id);
         if (!c)
           throw new Error(
-            `No composition "${id}". Found: ${all.map((x: { id: string }) => x.id).join(", ")}`,
+            `There is no composition called "${id}". The compositions in this project are: ${all.map((x: { id: string }) => x.id).join(", ")}`,
           );
         return c;
       })

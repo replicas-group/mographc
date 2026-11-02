@@ -8,17 +8,17 @@ Test files end in `.mographc.ts` (or `.tsx`, `.js`). mographc runs them itself o
 import { describe, expect, loadFilm, test } from "mographc/test";
 const film = await loadFilm("Launch");
 
-describe("beat 2", () => {
+describe("section 2: the agent sends the message", () => {
   test("the agent clicks Send", () =>
     expect(film.get("cursor:agent")).toPointAt(film.get("button:send"), {
       at: 4.2,
     }));
-  test("then flings off", () =>
+  test("then leaves by moving off the canvas", () =>
     expect(film.get("cursor:agent")).toLeaveCanvas({ by: 5 }));
-  test("the chat reads on a phone", () =>
+  test("the chat text is at least 18 px, large enough to read on a phone", () =>
     expect(film.get("window:chat")).toHaveTextAtLeast(18, { during: [3, 5] }));
 });
-test("the film lints clean", async () => {
+test("the film passes the compiler and the linter", async () => {
   await expect(film).toPassLint();
 });
 ```
@@ -27,23 +27,23 @@ The file name doesn't end in `.test.ts` on purpose. Vitest, Jest and Bun pick up
 
 ## Film matchers
 
-| Matcher                                    | Passes when                                                                                             |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `toBeVisible(when?)` / `toBeHidden(when?)` | opacity over 0.3 with some of it on screen (or not), at every frame of `{ at }` or `{ during: [a, b] }` |
-| `toPointAt(target, { at, tolerance? })`    | the pointer's `data-motion-tip` (else its top-left) is inside the target element or box                 |
-| `toLandAt({ x, y }, { at, tolerance? })`   | its centre is within `tolerance` px (default 8) of the point                                            |
-| `toOverlap(other, when?)`                  | they overlap on screen at some frame; use `.not` for "never"                                            |
-| `toStayInside(box or "safe-area", when?)`  | it never leaves the box (the safe area is the central 90%)                                              |
-| `toHaveTextAtLeast(px, when?)`             | every visible line of text inside it is at least `px` on screen                                         |
-| `toMoveContinuously()`                     | it never jumps                                                                                          |
-| `toEaseOut({ between? })`                  | every move that lands eases out as strongly as its length needs                                         |
-| `toLeaveCanvas({ by })`                    | it's gone by then, and it left by moving off the canvas                                                 |
-| `toAppearAt(time, { within? })`            | it's first fully visible within `within` s (default 0.1) of `time`                                      |
-| `toHold({ seconds, from? })`               | it's on screen and still for at least that long                                                         |
-| `toPrecede(other)`                         | it's visible before the other is                                                                        |
-| `toBeRead()`                               | the simulated viewer finishes reading its text before it leaves (see `attention/unread-text`)           |
-| `toBeTheFocus({ during, share? })`         | the simulated viewer is looking at it for `share` (default 60%) of the window                           |
-| `toPassLint()` (on the film)               | the film passes the compiler and the project's lint config                                              |
+| Matcher                                    | Passes when                                                                                                                                                                                                      |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toBeVisible(when?)` / `toBeHidden(when?)` | its opacity is over 0.3 and some of it is on the canvas (or not), at every frame of `{ at }` or `{ during: [a, b] }`                                                                                             |
+| `toPointAt(target, { at, tolerance? })`    | the cursor's [tip](terms.md#elements) (its `data-motion-tip` element, or else its top-left corner) is inside the target element or box, or within `tolerance` px of it (default 0)                               |
+| `toLandAt({ x, y }, { at, tolerance? })`   | its centre is within `tolerance` px (default 8) of the point at that time                                                                                                                                        |
+| `toOverlap(other, when?)`                  | they overlap on screen at some frame; use `.not` for "never"                                                                                                                                                     |
+| `toStayInside(box or "safe-area", when?)`  | no part of it goes outside the box or the [safe area](terms.md#the-film) (the central 90% of the canvas)                                                                                                         |
+| `toHaveTextAtLeast(px, when?)`             | every visible line of text inside it has a font size of at least `px` on screen                                                                                                                                  |
+| `toMoveContinuously()`                     | it never moves more than 40 px at 1080p in one frame while moving less than a quarter of that in the frames on either side                                                                                       |
+| `toEaseOut({ between? })`                  | every [move](terms.md#motion) longer than 40 px that comes to rest on the canvas has an [ease-out](terms.md#motion) strength of at least 0.26 (moves under 0.4 s), 0.33 (0.4 to 0.8 s) or 0.40 (0.8 s or longer) |
+| `toLeaveCanvas({ by })`                    | it's gone by that time, and its last position was off the canvas                                                                                                                                                 |
+| `toAppearAt(time, { within? })`            | its opacity first goes above 0.5 within `within` s (default 0.1) of `time`                                                                                                                                       |
+| `toHold({ seconds, from? })`               | it stays still (moving under 0.5 px a frame) and visible for at least that many seconds, from `from` or at any time                                                                                              |
+| `toPrecede(other)`                         | it becomes visible before the other does                                                                                                                                                                         |
+| `toBeRead()`                               | the [simulated viewer](terms.md#reading) finishes reading its text before it leaves (see `attention/unread-text`)                                                                                                |
+| `toBeTheFocus({ during, share? })`         | the simulated viewer is looking at it for at least `share` (default 0.6, meaning 60%) of the time range                                                                                                          |
+| `toPassLint()` (on the film)               | the film passes the compiler and the project's lint config                                                                                                                                                       |
 
 `expect` also has the common general matchers (`toBe`, `toEqual`, `toBeTruthy`, `toBeGreaterThan`, `toContain`, `toMatch` and others), every matcher supports `.not`, and `expect.extend` adds your own.
 
@@ -51,7 +51,7 @@ Times are in seconds. Elements are found by their `data-motion` tags with `film.
 
 When a matcher fails, its message gives the measured value, for example where the cursor's tip was compared with the target's box.
 
-[What to test in each beat](../skills/mographc/references/testing.md), in the agent skill, has a table of common checks and a worked example.
+[What to test in each section](../skills/mographc/references/testing.md), in the agent skill, has a table of common checks and a worked example.
 
 ---
 

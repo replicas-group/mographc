@@ -1,7 +1,7 @@
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 
 // The moments the film is built around, in frames at 30 fps. The tests use the same times.
-export const BEAT = {
+export const TIMES = {
   typed: 94,
   click: 100,
   leave: 108,
@@ -164,22 +164,36 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
   const windowIn = tween(frame, 40, 58, 0, 1, CURVE.move);
   const typed = PROMPT.slice(
     0,
-    Math.floor(tween(frame, 78, BEAT.typed, 0, PROMPT.length, Easing.linear)),
+    Math.floor(tween(frame, 78, TIMES.typed, 0, PROMPT.length, Easing.linear)),
   );
-  const sent = frame >= BEAT.click;
-  const inputOut = tween(frame, BEAT.click, BEAT.click + 8, 1, 0);
-  const sentIn = tween(frame, BEAT.click, BEAT.click + 14, 0, 1, CURVE.arrive);
-  const replyIn = tween(frame, BEAT.reply, BEAT.reply + 18, 0, 1, CURVE.arrive);
+  const sent = frame >= TIMES.click;
+  const inputOut = tween(frame, TIMES.click, TIMES.click + 8, 1, 0);
+  const sentIn = tween(
+    frame,
+    TIMES.click,
+    TIMES.click + 14,
+    0,
+    1,
+    CURVE.arrive,
+  );
+  const replyIn = tween(
+    frame,
+    TIMES.reply,
+    TIMES.reply + 18,
+    0,
+    1,
+    CURVE.arrive,
+  );
   const checksIn = tween(
     frame,
-    BEAT.checks,
-    BEAT.checks + 18,
+    TIMES.checks,
+    TIMES.checks + 18,
     0,
     1,
     CURVE.arrive,
   );
 
-  const send = onScreen(BEAT.click, {
+  const send = onScreen(TIMES.click, {
     x: SEND.x + SEND.w / 2,
     y: SEND.y + SEND.h / 2,
   });
@@ -194,10 +208,10 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
           { at: 85, x: 1700, y: 980 },
         ]
       : []),
-    { at: BEAT.click, x: target.x, y: target.y },
-    { at: BEAT.leave, x: target.x + 2, y: target.y + 2 },
+    { at: TIMES.click, x: target.x, y: target.y },
+    { at: TIMES.leave, x: target.x + 2, y: target.y + 2 },
     // Bug 3 (in Cursor): instead of leaving by the right edge, it fades out where it is.
-    { at: BEAT.leave + 18, x: 2100, y: 900 },
+    { at: TIMES.leave + 18, x: 2100, y: 900 },
   ];
 
   return (
@@ -319,7 +333,7 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
           </div>
         </div>
       </AbsoluteFill>
-      <Cursor frame={frame} keys={keys} click={BEAT.click} fadeOut={broken} />
+      <Cursor frame={frame} keys={keys} click={TIMES.click} fadeOut={broken} />
     </AbsoluteFill>
   );
 };
