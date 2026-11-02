@@ -14,7 +14,7 @@ npx mographc verify    # runs the compiler, the linter and the tests; exits 1 on
 
 mographc needs Node 22.13 or later. Bun users can run it with `bunx mographc`.
 
-You don't need any other setup, because mographc bundles the project with its own `remotion.config.ts` (so Tailwind and custom webpack settings still apply), wraps every composition in a probe, and steps through every frame without taking screenshots. The result is cached until the project's sources change.
+You don't need any other setup. mographc bundles the project with its own `remotion.config.ts` (so Tailwind and custom webpack settings still apply), wraps every [composition](terms.md#the-film) in a probe that measures its elements, and renders every frame without taking screenshots. The measurements are cached until the project's sources change.
 
 mographc uses the project's own copy of Remotion rather than bringing its own, so there is only one version of Remotion in the project and it always matches.
 
@@ -41,11 +41,11 @@ This makes `.agents/skills/mographc` a link to `node_modules/mographc/skills/mog
 
 ## The commands
 
-| Command          | Similar to | What it checks                                                                                                                                                                      | Setup                         |
-| ---------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `mographc check` | `tsc`      | Whether anything is broken: teleports, flicker, text cut off or drawn over other text, missing images, fallback fonts.                                                              | none                          |
-| `mographc lint`  | ESLint     | Whether the motion follows the rules: easing strength by move length, squash and stretch, staging, spacing, legibility, pacing, attention, and regressions against an approved cut. | optional `mographc.config.ts` |
-| `mographc test`  | Vitest     | Whether the film does what you meant: the cursor clicks _Send_ at 4.2 s, the headline never touches the product.                                                                    | `*.mographc.ts` files         |
+| Command          | Similar to | What it checks                                                                                                                                                                                                                                                                                                                                                     | Setup                         |
+| ---------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| `mographc check` | `tsc`      | Whether anything is broken: elements that jump or flicker, text cut off or drawn over other text, images that don't load, fonts that fall back to another font.                                                                                                                                                                                                    | none                          |
+| `mographc lint`  | ESLint     | Whether the motion follows the rules: how strongly each move slows down at the end for its length, whether a fast cursor stretches, where elements are placed and how much room they have, text size, how long things stay on screen, what the [simulated viewer](terms.md#reading) manages to read, and changes for the worse since the [baseline](baselines.md). | optional `mographc.config.ts` |
+| `mographc test`  | Vitest     | Whether the film does what you meant: the cursor clicks _Send_ at 4.2 s, the headline never overlaps the product window.                                                                                                                                                                                                                                           | `*.mographc.ts` files         |
 
 `mographc verify` runs all three. `mographc rules` lists every rule, and `mographc explain <rule>` prints what a rule checks, why it matters and how to fix a finding. `mographc help` lists every command and option.
 
@@ -60,13 +60,13 @@ Every command takes composition ids to limit the run (`mographc lint Launch Teas
 | `--warnings=false` | Print errors only.                                                                       |
 | `--no-cache`       | Capture the film again even if its sources haven't changed.                              |
 
-`mographc elements` lists every element mographc sees in the film, with its id, role and the times it's on screen. It's the quickest way to find what to tag, or to find out why a test can't find an element.
+`mographc elements` lists every [element](terms.md#elements) mographc sees in the film, with its id, [role](terms.md#elements) and the times it's on screen. It's the quickest way to find what to tag, or to find out why a test can't find an element.
 
 In a terminal, output is coloured and wrapped to the window's width. When it's piped, colour and wrapping are off, so each finding stays on its own lines. Set `NO_COLOR` to turn colour off, or `FORCE_COLOR` to turn it on.
 
 ## Naming elements with `data-motion`
 
-Findings and tests are much easier to read when the film's subjects have names:
+Findings and tests are much easier to read when the film's important elements have names. A [tag](terms.md#elements) is a `data-motion="role:name"` attribute:
 
 ```tsx
 <div data-motion="window:pr">…</div>
@@ -74,9 +74,10 @@ Findings and tests are much easier to read when the film's subjects have names:
 <button data-motion="button:send">Send</button>
 ```
 
-- **The part before the colon is the role.** It decides which rules apply. The roles are `cursor`, `window`/`card`/`panel` (surfaces), `button`, `headline`/`title`, `logo`, or anything else.
-- **The part after the colon is the name.** Elements without a tag are still checked. mographc identifies them by their structure and by following them from frame to frame, and infers their role: large free-standing text is a headline, a painted box is a surface, and a small glyph that travels and stretches is a cursor.
-- **`data-motion-tip`** marks a pointer's hotspot, so that `toPointAt` can check exactly where a click lands.
+- The part before the colon is the role, which decides which rules apply to the element. For example, `window`, `card` and `panel` all give the role `surface` (a box that contains other elements), and `title` gives the role `headline`. [Terms](terms.md#elements) lists every role and the tags for it.
+- The part after the colon is the name that findings and tests use.
+- Elements without a tag are still checked. mographc follows them from frame to frame by their place in the page structure, their position and their size, and infers their role. For example, untagged text at least 40 px tall at 1080p that isn't inside a surface is a headline.
+- `data-motion-tip` marks the [tip](terms.md#elements) of a cursor, the point that clicks, so that `toPointAt` can check exactly where a click lands.
 
 ---
 

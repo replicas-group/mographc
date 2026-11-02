@@ -3,12 +3,14 @@ import type { Element, Film } from "./film.ts";
 export type Severity = "error" | "warn" | "off";
 
 export interface RuleDocs {
-  /** One line: what the rule requires. */
+  /** One sentence: what the rule requires, with what is measured and the threshold. */
   summary: string;
-  /** Why it matters to a viewer. */
+  /** Why it matters to a viewer, and how it is measured. */
   why: string;
   /** How to fix a finding, concretely. */
   fix: string;
+  /** What each option controls, by option name. */
+  options?: Record<string, string>;
 }
 
 export interface Rule<Options extends object = Record<string, unknown>> {
@@ -19,7 +21,7 @@ export interface Rule<Options extends object = Record<string, unknown>> {
   docs: RuleDocs;
   /** Option defaults; config can override any of them. */
   options: Options;
-  /** Needs the approved cut to compare against. */
+  /** Needs a baseline to compare against. */
   needsBaseline?: boolean;
   check(context: RuleContext<Options>): void;
 }
@@ -28,9 +30,9 @@ export interface Report {
   element?: Element;
   /** Frames the finding spans. */
   frames: [number, number];
-  /** What was measured, in words and numbers. */
+  /** What was measured, in words and numbers. Printed after the element's name. */
   measured: string;
-  /** What the rule needs instead. */
+  /** What the rule requires instead, as a clause that reads after "Required:". */
   need: string;
   /** Overrides the rule's severity for this finding, e.g. an error that's only a warning when close. */
   severity?: Exclude<Severity, "off">;
@@ -39,7 +41,7 @@ export interface Report {
 export interface RuleContext<Options> {
   film: Film;
   options: Options;
-  /** The approved cut's film, when the rule needs one and a baseline exists. */
+  /** The baseline film (the saved measurements it is compared with), when the rule needs one and a baseline exists. */
   baseline?: Film;
   report(finding: Report): void;
 }

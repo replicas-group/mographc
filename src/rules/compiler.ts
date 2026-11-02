@@ -13,9 +13,9 @@ export const jump = defineRule({
   options: {},
   docs: {
     summary:
-      "No element moves or resizes far more in one frame than in the frames around it.",
-    why: "A viewer sees a sudden jump as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component swapped for another at a new position.",
-    fix: "Find the frame in the finding and make the motion before and after it start and end at the same point. If one element hands off to another, start the second exactly where the first ends.",
+      "No element moves or changes size by more than 40 px at 1080p in a single frame when that change is also more than 4 times the largest change 2 to 3 frames before or after it (or 4 px at 1080p, if that is larger).",
+    why: "A viewer sees a sudden jump in position or size as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component replaced by another at a new position. For each frame, the rule takes the larger of how far the element's centre moved and how much the diagonal of its box changed (for a cursor, only how far it moved, because a cursor shrinking as it clicks is intended). Frames where the element is below 30% opacity, or where its text changed (typing, a counter), are skipped, and a jump spread over two neighbouring frames, as when a 30 fps animation is rendered at 60 fps, counts as one jump.",
+    fix: "Go to the frames in the finding and make the motion before and after them start and end at the same position and size. If one element replaces another, start the new one exactly where the old one ends.",
   },
   check({ film, report }) {
     for (const el of film.elements) {
@@ -60,8 +60,8 @@ export const jump = defineRule({
           report({
             element: el,
             frames: [fs[i - 1], fs[i]],
-            measured: `moves ${c.toFixed(0)} px in one frame (the frames around it: ${around.toFixed(0)} px)`,
-            need: "one continuous path",
+            measured: `moves or changes size by ${c.toFixed(0)} px in one frame, while the largest change 2 to 3 frames before or after is ${around.toFixed(0)} px`,
+            need: "a continuous path, with no single-frame change over 40 px at 1080p that is more than 4 times the change in the frames around it",
           });
         }
       });
@@ -75,9 +75,10 @@ export const flicker = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "Nothing appears for only a frame or two.",
-    why: "An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch.",
-    fix: "Check the conditions that mount the element at that time. Usually a range boundary is off by one, or an exit and an entrance overlap by a frame.",
+    summary:
+      "No element is visible for 0.07 s or less (2 frames at 30 fps) and never again.",
+    why: "An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch. The rule counts an element as visible in a frame when it is above 30% opacity and its visible part covers more than 0.3% of the canvas. It reports an element whose visible frames form a single unbroken run of 0.07 s or less, and that is present in the film, visible or not, for at most 2 frames longer than that.",
+    fix: "Check the conditions that show the element at that time. Usually the end of a frame range is off by one, or an element's exit and the next element's entrance overlap by a frame.",
   },
   check({ film, report }) {
     const longest = framesIn(film, 0.07);
@@ -96,8 +97,8 @@ export const flicker = defineRule({
         report({
           element: el,
           frames: spans[0],
-          measured: `on screen for ${spans[0][1] - spans[0][0] + 1} frame(s)`,
-          need: "on screen long enough to read, or not at all",
+          measured: `is visible for ${spans[0][1] - spans[0][0] + 1} frame(s) and at no other time`,
+          need: "the element is visible for longer than 0.07 s, or not shown at all",
         });
       }
     }
@@ -111,9 +112,9 @@ export const textCut = defineRule({
   options: {},
   docs: {
     summary:
-      "Text that's held still is never cut off by its own box, a parent's clip or the canvas edge.",
-    why: "Words that are cut off look like a layout bug, and on a phone they can't be read at all.",
-    fix: "Give the container room for its text (wider, taller, or smaller type), move the text inside the visible area, or pan so the text is whole before you hold on it.",
+      "Text that stays still for 0.5 s or longer has at least 85% of its area visible, not cut off by its own box, a container that clips it, or the edge of the canvas.",
+    why: "Words that are cut off look like a layout bug, and on a phone they can't be read at all. The rule checks every text and headline in each frame where it is above 50% opacity and moves less than 0.5 px from the previous frame. It compares the area of the text's glyphs that is visible with the full area of the glyphs, and reports a run of such frames lasting 0.5 s or longer in which less than 85%, but more than none, is visible. Text that is cut off only while it moves, such as text scrolling past, is not reported.",
+    fix: "Give the container room for its text (make it wider or taller, or the type smaller), move the text inside the visible area, or pan so the whole text is visible before it stops moving.",
   },
   check({ film, report }) {
     const hold = framesIn(film, 0.5);
@@ -135,8 +136,8 @@ export const textCut = defineRule({
         report({
           element: el,
           frames: [a, b],
-          measured: `${Math.round((1 - area(s.visible) / area(s.box)) * 100)}% of "${(s.raw.x ?? "").slice(0, 30)}" is cut off for ${(b - a + 1) / film.fps} s`,
-          need: "whole text while it's held",
+          measured: `has ${Math.round((1 - area(s.visible) / area(s.box)) * 100)}% of the text "${(s.raw.x ?? "").slice(0, 30)}" cut off for ${(b - a + 1) / film.fps} s while it stays still`,
+          need: "at least 85% of the text visible whenever it stays still for 0.5 s or longer",
         });
       }
     }
@@ -149,9 +150,9 @@ export const missingImage = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "Every image loads.",
-    why: "A broken image renders as nothing, or as the browser's broken-image box.",
-    fix: "Check the path. Files in `public/` are referenced with `staticFile()`, and the file must exist at render time.",
+    summary: "Every image in the film loads when the frames are rendered.",
+    why: "An image that fails to load is drawn as nothing, or as the browser's broken-image icon, so the viewer sees an empty space or an obvious error. The rule reports every element whose image the browser marked as failed to load in any frame.",
+    fix: "Check the image's path. Reference files in `public/` with `staticFile()`, and make sure the file exists when the film is rendered.",
   },
   check({ film, report }) {
     for (const el of film.elements) {
@@ -160,8 +161,9 @@ export const missingImage = defineRule({
         report({
           element: el,
           frames: [broken[0], broken[broken.length - 1]],
-          measured: "the image failed to load",
-          need: "a loaded image",
+          measured:
+            "is an image that failed to load, so nothing or a broken-image icon is drawn in its place",
+          need: "the image file loads when the frames are rendered",
         });
     }
   },
@@ -173,9 +175,10 @@ export const fallbackFont = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "Text renders in the font it asks for, never a fallback.",
-    why: "A fallback font changes the width of every line and the look of the brand, so a layout tuned to the real font breaks.",
-    fix: "Load the font before rendering: `@remotion/google-fonts` `loadFont()`, or a `FontFace` with `delayRender` until it has loaded.",
+    summary:
+      "All text is drawn in the font its CSS declares, never in a fallback font because the declared font didn't load.",
+    why: "A fallback font changes the width of every line and the look of the brand, so a layout designed for the real font breaks. The rule reports each declared font family that the browser replaced with a fallback in any frame, with the first and last frame where that happened.",
+    fix: "Load the font before the frames render: call `loadFont()` from `@remotion/google-fonts`, or load a `FontFace` and pause rendering with `delayRender` until it has loaded.",
   },
   check({ film, report }) {
     const seen = new Map<string, number[]>();
@@ -185,8 +188,8 @@ export const fallbackFont = defineRule({
     for (const [family, fs] of seen) {
       report({
         frames: [fs[0], fs[fs.length - 1]],
-        measured: `"${family}" is declared but didn't load; text fell back to another font`,
-        need: "the declared font, loaded",
+        measured: `The font "${family}" is declared but didn't load, so its text was drawn in a fallback font`,
+        need: "the declared font is loaded before the frames render",
       });
     }
   },
@@ -199,9 +202,9 @@ export const offCanvas = defineRule({
   options: {},
   docs: {
     summary:
-      "A tagged subject is on the canvas at some point while it's shown.",
-    why: "If a tagged subject is never on screen, the shot shows nothing where something was meant to be. Waiting off screen before an entrance or after an exit is fine.",
-    fix: "Check the subject's position; a coordinate is probably in the wrong space (canvas vs. a scaled parent), or its entrance never runs.",
+      "A tagged element (other than a cursor) that is shown above 50% opacity for at least 0.5 s has its centre on the canvas in at least one of those frames.",
+    why: "A tagged element is one the film is about, so if it is never on screen the viewer sees nothing where something was meant to be. Being off the canvas for part of the time, such as before an entrance or after an exit, is fine; the rule only reports an element whose centre is outside the canvas in every frame where it is above 50% opacity.",
+    fix: "Check the element's position. A coordinate is probably in the wrong space (canvas coordinates used inside a scaled or moved parent), or the animation that brings it onto the canvas never runs.",
   },
   check({ film, report }) {
     for (const el of film.elements) {
@@ -216,8 +219,8 @@ export const offCanvas = defineRule({
       report({
         element: el,
         frames: [shown[0], shown[shown.length - 1]],
-        measured: `never on the canvas (first at (${c.x.toFixed(0)}, ${c.y.toFixed(0)}))`,
-        need: "on the canvas while it's shown",
+        measured: `has its centre outside the canvas in every frame where it is shown (in the first, its centre is at (${c.x.toFixed(0)}, ${c.y.toFixed(0)}) px)`,
+        need: "the element's centre is on the canvas in at least one frame while it is shown",
       });
     }
   },
@@ -238,9 +241,9 @@ export const textOverlap = defineRule({
   options: {},
   docs: {
     summary:
-      "Two different texts are never drawn on top of each other, whether by a crossfade in the same place, a line sliding under another, or labels stacked on each other.",
-    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often in handoffs, when an outgoing message fades out in the same place the incoming one fades in.",
-    fix: "Let the outgoing text leave before the incoming one lands, move one out of the other's way (push the old line up and out), or put the incoming text on an opaque surface that covers the old one.",
+      "Two different texts above 20% opacity never overlap by 30% or more of the smaller one's area for 0.1 s or longer (and at least 3 frames), unless an opaque background behind the upper text covers the overlap.",
+    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.",
+    fix: "Let the old text leave before the new one appears, move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.",
   },
   check({ film, report }) {
     const hits = new Map<
@@ -301,7 +304,7 @@ export const textOverlap = defineRule({
             continue;
           const shared = intersect(p.r.v, q.r.v);
           if (area(shared) < 0.3 * Math.min(area(p.r.v), area(q.r.v))) continue;
-          // Hidden, not overlapping: an opaque surface painted after the lower text covers the overlap.
+          // Hidden, not overlapping: an opaque box painted after the lower text covers the overlap.
           const [lower, upper] = p.i < q.i ? [p, q] : [q, p];
           if (
             covers.some(
@@ -328,8 +331,8 @@ export const textOverlap = defineRule({
         report({
           element: film.elementOf(a, h.key),
           frames: [a, b],
-          measured: `"${h.a.slice(0, 30)}" and "${h.b.slice(0, 30)}" are drawn on top of each other for ${((b - a + 1) / film.fps).toFixed(2)} s`,
-          need: "one text at a time in any spot",
+          measured: `"${h.a.slice(0, 30)}" and "${h.b.slice(0, 30)}" are drawn on top of each other, overlapping by at least 30% of the smaller one's area, for ${((b - a + 1) / film.fps).toFixed(2)} s`,
+          need: "only one text at a time in any spot: no two different texts overlap by 30% or more of the smaller one's area for 0.1 s or longer",
         });
       }
   },

@@ -1,6 +1,6 @@
 /**
- * Regressions: against the cut a person last approved (the baseline), what got
- * measurably worse. Beats are matched by their headlines, in order, like a diff.
+ * Regressions: what got measurably worse compared with the saved baseline (usually the version a
+ * person last approved). Parts of the two films are paired by their headlines, in order, like a diff.
  */
 import { area, intersect, type Film, type Headline } from "../film.ts";
 import { defineRule } from "../rule.ts";
@@ -22,7 +22,7 @@ const similarity = (a: string, b: string) => {
   );
 };
 
-/** Align two cuts' headline beats in order, so a reworded line still pairs with its beat. */
+/** Pair two films' headlines in order, so a reworded headline still pairs with its earlier version. */
 export const alignBeats = (cur: Headline[], base: Headline[]) => {
   const n = cur.length;
   const m = base.length;
@@ -53,7 +53,7 @@ export const alignBeats = (cur: Headline[], base: Headline[]) => {
   return pairs;
 };
 
-/** Text a beat holds on screen for at least a quarter of its length. */
+/** Small text on screen for at least a quarter of the frames from `from` to `to`. */
 const inventory = (film: Film, from: number, to: number) => {
   const seen = new Map<string, number>();
   let n = 0;
@@ -90,9 +90,10 @@ export const contentRemoved = defineRule({
   needsBaseline: true,
   options: {},
   docs: {
-    summary: "A beat keeps what made it full in the approved cut.",
-    why: "Content removed from a beat a person already approved (a section of a sidebar, a label, a row) makes the shot emptier, and it's rarely what anyone meant to change.",
-    fix: "Restore the missing items, or if removing them was the point, suppress the finding for that beat with the reason. A beat that changed wholesale is reported as a warning for the staging review instead.",
+    summary:
+      "Compared with the saved baseline, while each headline is on screen the film shows the same smaller texts (under 40 px, such as labels and list rows) as the baseline did, with at most one of them missing.",
+    why: "Labels, list rows or sidebar sections that disappear from a part of the film a person already approved make that part emptier, and that is rarely a change anyone meant to make. The rule pairs each headline in the film with the same headline in the baseline, in order, allowing for rewording (at least 50% of letters in common). For each pair it lists the texts in the baseline that are longer than 3 characters, have a font size under 40 px, are above 50% opacity and are on screen in at least 25% of the headline's time on screen (checked every second frame), and reports the ones the film no longer shows during its headline's time. A shortened text that keeps at least 60% of the original's length still counts as shown. Parts of the film where no headline is on screen are not compared.",
+    fix: "Restore the missing texts. If removing them was intended, accept the finding with a time range and a reason in the config, or save a new baseline with `mographc baseline save`. When more than 40% of the baseline's texts are missing, that part of the film was probably redesigned rather than trimmed, so the finding is only a warning asking a person to look at the new version.",
   },
   check({ film, baseline, report }) {
     if (!baseline) return;
@@ -116,14 +117,14 @@ export const contentRemoved = defineRule({
       report({
         frames: [h.from, h.to],
         measured: wholesale
-          ? `${lost.length} of ${before.size} items differ from the approved cut's "${g.text.slice(0, 24)}"`
-          : `${lost.length} items gone since the approved cut: ${lost
+          ? `${lost.length} of the ${before.size} texts the baseline showed with the headline "${g.text.slice(0, 24)}" are missing, more than 40% of them, so this part of the film was probably redesigned`
+          : `${lost.length} texts the baseline showed with the headline "${g.text.slice(0, 24)}" are missing: ${lost
               .slice(0, 4)
               .map((x) => `"${x.slice(0, 24)}"`)
               .join(", ")}`,
         need: wholesale
-          ? "check the new composition in the staging review"
-          : "keep what made the approved beat full",
+          ? "a person checks the new version of this part of the film and, if it is right, saves a new baseline"
+          : "at most 1 of the baseline's texts missing while this headline is on screen",
         severity: wholesale ? "warn" : "error",
       });
     }
@@ -161,9 +162,14 @@ export const smaller = defineRule({
   needsBaseline: true,
   options: { tolerance: 0.1 },
   docs: {
-    summary: "Cursors aren't smaller than in the approved cut.",
-    why: "The cursor is often the subject the viewer follows, so making it smaller without a reason makes it harder to follow.",
-    fix: "Restore the approved size, or suppress with the reason if the change was deliberate.",
+    summary:
+      "Compared with the saved baseline, neither the film's largest cursor nor its smallest cursor is more than 10% smaller than the largest or smallest cursor in the baseline.",
+    why: "The cursor is often the element the viewer follows, so making it smaller without a reason makes it harder to follow. A cursor's size is the median, over the frames it is in, of the longer side of its box in px. The rule compares the largest cursor in the film with the largest in the baseline, and the smallest with the smallest.",
+    fix: "Restore the cursor's size from the baseline. If the change was deliberate, accept the finding with a time range and a reason in the config, or save a new baseline with `mographc baseline save`.",
+    options: {
+      tolerance:
+        "How much smaller than in the baseline a cursor may be, as a share of the baseline's size from 0 to 1 (0.1 allows 10% smaller).",
+    },
   },
   check({ film, baseline, options, report }) {
     if (!baseline) return;
@@ -177,8 +183,8 @@ export const smaller = defineRule({
       if (a < (1 - options.tolerance) * b)
         report({
           frames: [0, film.durationInFrames - 1],
-          measured: `the ${role} cursor is ${a.toFixed(0)} px`,
-          need: `the approved ${b.toFixed(0)} px`,
+          measured: `The ${role} cursor is ${a.toFixed(0)} px along its longer side (median over its frames)`,
+          need: `at least ${((1 - options.tolerance) * 100).toFixed(0)}% of the baseline's ${b.toFixed(0)} px`,
         });
   },
 });
@@ -191,9 +197,9 @@ export const lessStretch = defineRule({
   options: {},
   docs: {
     summary:
-      "Cursors stretch at speed at least as much as in the approved cut.",
-    why: "With less stretch, a fast cursor looks stiffer than it did in the approved cut.",
-    fix: "Restore the approved stretch, or check the cursor still moves as fast as it did.",
+      "Compared with the saved baseline, the cursors' stretch while moving fast (averaged over the fastest 10% of frames at 600 px/s or more) is no more than 0.04 lower than in the baseline.",
+    why: "Stretching a fast cursor along its direction of travel makes its speed easier to follow; with less stretch than the version a person approved, a fast cursor looks stiffer. The rule takes every frame in which a cursor moves at 600 px/s or more, keeps the 10% of those frames with the most stretch (at least one), and averages their stretch. With no such frames the value is 1, meaning no stretch.",
+    fix: "Restore the stretch from the baseline, and check that the cursor still moves as fast as it did, since slower moves have no frames to measure.",
   },
   check({ film, baseline, report }) {
     if (!baseline) return;
@@ -202,8 +208,8 @@ export const lessStretch = defineRule({
     if (a < b - 0.04)
       report({
         frames: [0, film.durationInFrames - 1],
-        measured: `peak stretch at speed ${a.toFixed(2)}`,
-        need: `the approved ${b.toFixed(2)}`,
+        measured: `The cursors' average stretch over their most stretched fast frames is ${a.toFixed(2)}`,
+        need: `a stretch no more than 0.04 below the baseline's ${b.toFixed(2)}`,
       });
   },
 });
@@ -216,9 +222,9 @@ export const weakerEaseOut = defineRule({
   options: {},
   docs: {
     summary:
-      "Each beat's main move eases out at least as strongly as in the approved cut.",
-    why: "When the same move slows down less at the end than it did in the approved cut, people notice the film got worse even if they can't say why.",
-    fix: "Restore the approved curve on that move.",
+      "Compared with the saved baseline, the main move while each headline is on screen has an ease-out strength no more than 0.05 lower than the same move in the baseline.",
+    why: "When the same move slows down less before it stops than it did in the version a person approved, people notice the film got worse even if they can't say why. The rule pairs each headline in the film with the same headline in the baseline, in order, allowing for rewording. For each, the main move is the move by the largest element (by visible area, and covering more than 5% of the canvas, cursors excluded) that starts between 10 frames before the headline appears and when it leaves, lasts at least 0.25 s, travels more than 80 px, and ends with the element on the canvas. The rule compares the ease-out strength (the share of the move's time spent covering its last 20% of distance) of the two main moves.",
+    fix: "Restore the easing curve from the baseline on that move, so it spends as much of its time slowing down before it stops.",
   },
   check({ film, baseline, report }) {
     if (!baseline) return;
@@ -247,8 +253,8 @@ export const weakerEaseOut = defineRule({
         report({
           element: a.e,
           frames: [a.m.from, a.m.to],
-          measured: `ease-out ${a.m.easeOut.toFixed(2)}`,
-          need: `the approved ${b.m.easeOut.toFixed(2)} on this beat`,
+          measured: `makes the main move while this headline is on screen with an ease-out strength of ${a.m.easeOut.toFixed(2)}`,
+          need: `an ease-out strength no more than 0.05 below the baseline's ${b.m.easeOut.toFixed(2)} for the same move`,
         });
     }
   },

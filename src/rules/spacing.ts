@@ -1,7 +1,7 @@
 /**
- * Spacing: the room around things. A subject is either framed with room or clearly cropped,
- * never in between; free text is either centred in the space it sits in or lined up with
- * something, never floating at an unexplained offset.
+ * Spacing: the room around things. A large surface's edge is either well inside the canvas or
+ * clearly cut off by it, never just at it; text outside any surface is either centred in the
+ * space beside it or lined up with something.
  */
 import { area, intersect, isAncestor, type Element } from "../film.ts";
 import { defineRule } from "../rule.ts";
@@ -9,7 +9,7 @@ import type { Box } from "../types.ts";
 import { viewer } from "../viewer.ts";
 import { frames as framesIn, px, runs } from "./util.ts";
 
-/** Frames where a box is held (moving under 2 px a frame), so framing is a choice, not motion. */
+/** Whether a box is standing still (moving under 2 px a frame), so its position is deliberate rather than part of a move. */
 const held = (el: Element, f: number) => {
   const s = el.at(f);
   const p = el.at(f - 1);
@@ -23,9 +23,17 @@ export const ambiguousCrop = defineRule({
   options: { room: 32, crop: 0.06, subject: 0.15, seconds: 0.5 },
   docs: {
     summary:
-      "A subject is either framed with room or clearly cropped by the frame, never just touching or barely cut by its edge.",
-    why: "A subject with space around it looks deliberately placed, and one that is cropped deeply looks like a close-up. An edge just inside the frame, or just past it, looks like a mistake, as if the subject didn't quite fit.",
-    fix: "Do one or the other: pull back until the edge has at least the room the finding gives, or push in until the frame clearly crops it.",
+      "Each edge of a large surface (a window, card or panel) that is standing still is either at least 32 px at 1080p inside the canvas edge, or past the canvas edge by more than 6% of the surface's width (left and right edges) or height (top and bottom edges).",
+    why: "A surface with space around it looks deliberately placed, and one that runs well past the canvas edge looks like a deliberate close-up. An edge just inside the canvas or just past it looks like a mistake, as if the surface didn't quite fit. The rule checks surfaces above 90% opacity that cover at least 15% of the canvas and have moved or resized by less than 2 px since the previous frame, and reports an edge that stays in between for at least 0.5 s.",
+    fix: "Either zoom out or move the surface until the edge is at least the required distance inside the canvas, or zoom in until the edge is well past the canvas edge.",
+    options: {
+      room: "The smallest distance, in px at 1080p, a surface's edge must be inside the canvas edge.",
+      crop: "How far past the canvas edge a surface's edge must be to count as clearly cut off, as a fraction of the surface's width (left and right edges) or height (top and bottom edges).",
+      subject:
+        "The smallest fraction of the canvas (0.15 is 15%) a surface must cover to be checked.",
+      seconds:
+        "The shortest time, in seconds, an edge must stay in between to be reported.",
+    },
   },
   check({ film, options, report }) {
     const room = px(film, options.room);
@@ -41,7 +49,7 @@ export const ambiguousCrop = defineRule({
         )
           continue;
         const [x, y, w, h] = s.box;
-        // Signed room to each frame edge: positive inside the frame, negative cropped.
+        // Signed distance to each canvas edge: positive inside the canvas, negative past its edge.
         const edges: [string, number, number][] = [
           ["left", x, w],
           ["top", y, h],
@@ -65,8 +73,8 @@ export const ambiguousCrop = defineRule({
           report({
             element: el,
             frames: [a, b],
-            measured: `its ${edge} edge is ${m >= 0 ? `${m.toFixed(0)} px inside` : `${(-m).toFixed(0)} px past`} the frame's edge`,
-            need: `at least ${options.room} px of room, or cropped clearly (past the edge by over ${(options.crop * 100).toFixed(0)}% of its size)`,
+            measured: `its ${edge} edge is ${m >= 0 ? `${m.toFixed(0)} px inside` : `${(-m).toFixed(0)} px past`} the canvas edge`,
+            need: `the edge at least ${options.room} px at 1080p inside the canvas edge, or past it by more than ${(options.crop * 100).toFixed(0)}% of the surface's width or height`,
           });
         }
       }
@@ -80,9 +88,19 @@ export const unbalancedSpace = defineRule({
   options: { ratio: 1.6, align: 10, seconds: 0.5, minGap: 24 },
   docs: {
     summary:
-      "Free text (a caption, a headline) is centred in the space it sits in, or lines up with something; it never floats at an unexplained offset.",
-    why: "Viewers notice the space on each side of a line of text. Equal space, or an edge shared with the product, looks intentional. Uneven space with no alignment looks accidental.",
-    fix: "Centre the text between what's on either side of it (the product's edge and the frame's), or align its edge with an edge of the product. The finding gives both gaps.",
+      "Text that isn't inside a surface (a window, card or panel), such as a caption or headline, either has a larger side gap of no more than 1.6 times the smaller one, or has its left or right edge within 10 px at 1080p of another element's edge or centre, or of the canvas's.",
+    why: "Viewers notice the space on each side of a line of text. Equal space, or an edge lined up with something else, looks intentional; uneven space with nothing to line up with looks accidental. For text of at least two words that has moved less than 2 px since the previous frame, the rule measures the gap from its left and right edges to the nearest element beside it at the same height, or to the canvas edge; small elements within one font size of the text and no more than twice its height, such as a logo beside a name, count as part of it. It reports when the larger gap is at least 24 px at 1080p and more than 1.6 times the smaller, nothing lines up, the text isn't centred on the canvas, and this lasts at least 0.5 s.",
+    fix: "Centre the text between the elements on either side of it (or the canvas edge), or move it so its left or right edge lines up with the edge or centre of another element. The finding gives both gaps.",
+    options: {
+      ratio:
+        "How many times larger one side gap may be than the other before the text counts as unbalanced.",
+      align:
+        "How close, in px at 1080p, an edge of the text must be to another element's edge or centre, or the canvas's, to count as lined up with it.",
+      seconds:
+        "The shortest time, in seconds, the problem must last to be reported.",
+      minGap:
+        "The smallest size, in px at 1080p, the larger gap must have for the text to be checked.",
+    },
   },
   check({ film, options, report }) {
     const v = viewer(film);
@@ -95,7 +113,7 @@ export const unbalancedSpace = defineRule({
       for (let f = r.from; f <= r.to; f += 1) {
         const own = r.boxes.get(f);
         if (!own) continue;
-        // Its letters and words in this frame, and whether they're held still.
+        // Its letters and words in this frame, and whether they're standing still.
         const mine = [...r.elements].filter((e) => {
           const s = e.at(f);
           return !!s && area(intersect(s.visible, own)) > 0.5 * area(s.visible);
@@ -180,7 +198,7 @@ export const unbalancedSpace = defineRule({
           hi <= options.ratio * Math.max(lo, 1)
         )
           continue;
-        // Lined up with something (an edge or a centre), or centred on the frame: intended.
+        // Lined up with something (an edge or a centre), or centred on the canvas: intended.
         const lines = [
           ...others,
           [0, 0, film.width, film.height] as Box,
@@ -204,8 +222,8 @@ export const unbalancedSpace = defineRule({
         report({
           element: h.el,
           frames: [a, b],
-          measured: `"${h.text.slice(0, 30)}" has ${h.gaps[0].toFixed(0)} px of space on its left and ${h.gaps[1].toFixed(0)} px on its right, and lines up with nothing`,
-          need: "the same space on both sides, or an edge shared with the product",
+          measured: `"${h.text.slice(0, 30)}" has ${h.gaps[0].toFixed(0)} px of space on its left and ${h.gaps[1].toFixed(0)} px on its right, and neither edge lines up with another element or the canvas`,
+          need: `the larger gap no more than ${options.ratio} times the smaller, or an edge within ${options.align} px at 1080p of another element's edge or centre`,
         });
       }
   },

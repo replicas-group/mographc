@@ -7,7 +7,7 @@
  * - an untagged element is followed by continuity: the nearest element of the same
  *   structural shape (and text) in the previous frame. When exactly one element has
  *   that shape in both frames it is the same element however far it moved, so a
- *   teleport reads as one huge step rather than one element ending and another starting.
+ *   teleport is measured as one huge step rather than one element ending and another starting.
  */
 import type { Box, RawElement, RawFilm } from "./types.ts";
 
@@ -312,7 +312,7 @@ export class Film {
     if (!e) {
       const tags = this.elements.filter((x) => x.tagged).map((x) => x.id);
       throw new Error(
-        `No element "${id}" in ${this.composition}. Tagged: ${tags.join(", ") || "none (add data-motion attributes)"}`,
+        `No element tagged "${id}" in ${this.composition}. The tagged elements are: ${tags.join(", ") || 'none (tag elements with data-motion="role:name")'}`,
       );
     }
     return e;
@@ -560,7 +560,7 @@ export class Film {
     if (this.activityCache) return this.activityCache;
     const out = new Map<number, Activity>();
     const canvas: Box = [0, 0, this.width, this.height];
-    // Substantial change: a real move (faster than 45 px/s at 1080p), a resize of over 1% a frame,
+    // Substantial change: a real move (faster than 45 px/s at 1080p), a resize of over 0.6% a frame,
     // a fade, new text, something arriving or leaving. A slow, steady move or zoom is drift: it
     // makes pixels change without giving the eye anything new, so it isn't activity.
     const fast = (45 * this.height) / 1080 / this.fps;
@@ -597,7 +597,7 @@ export class Film {
         }
         if (!s || !p) continue;
         // A zoom is judged by its rate, not by how fast a big surface's edges travel: a 3% push over
-        // two seconds is a creep however large the surface is.
+        // two seconds counts as slow drift however large the surface is.
         const shift = Math.hypot(
           s.box[0] + s.box[2] / 2 - p.box[0] - p.box[2] / 2,
           s.box[1] + s.box[3] / 2 - p.box[1] - p.box[3] / 2,

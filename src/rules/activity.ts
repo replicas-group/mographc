@@ -1,8 +1,8 @@
 /**
- * Energy and framing: how much of the film is alive, and whether the camera is where the
- * action is. Calibrated on product films people judged: the ones that held attention were
- * never still for more than about 0.9 s and had something changing about 65% of the time
- * (slow drift aside) with a big change half the time; films judged boring sat near 40%.
+ * Pace and framing: how much of the film is changing, and whether the view is zoomed in on
+ * where the change is. Calibrated on product films people judged: the ones that held attention
+ * were never still for more than about 0.9 s and had something changing about 65% of the time
+ * (slow drift aside) with a large change half the time; films judged boring sat near 40%.
  */
 import { area, type Element, type Film } from "../film.ts";
 import { defineRule } from "../rule.ts";
@@ -25,17 +25,25 @@ export const activity = defineRule({
   options: { share: 0.01, warnBelow: 0.6, errorBelow: 0.45 },
   docs: {
     summary:
-      "Something meaningful is moving most of the time, so the film never plays like a slideshow.",
-    why: "When nothing moves, viewers tend to stop watching. Films that hold attention have something changing almost all the time: a build, the next element arriving, or a camera move toward a subject. The rule measures the share of time at least 1% of the frame is changing, not counting slow drift (`camera/creep`).",
-    fix: "Break long shots into back-to-back sections (three things to show are three beats, not one frame), build elements in rather than showing them complete, and bring the next element in while text is read. A slow zoom or drift does not count.",
+      "On at least 60% of the film's frames, something changes over at least 1% of the canvas (a warning below 60%, an error below 45%).",
+    why: "When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. Slow, steady movement (see `camera/creep`) doesn't count.",
+    fix: "Split long sections into shorter ones that each show one thing, bring elements in one at a time instead of showing them complete, and bring in the next element while the viewer reads text. A slow zoom or drift doesn't count as change.",
+    options: {
+      share:
+        "The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing.",
+      warnBelow:
+        "The share of frames (0.6 is 60%) that must be changing; below it the rule reports a warning.",
+      errorBelow:
+        "The share of changing frames below which the finding is an error instead of a warning.",
+    },
   },
   check({ film, options, report }) {
     const share = activeFrames(film, options.share).length / film.frames.length;
     if (share >= options.warnBelow) return;
     report({
       frames: [film.frames[0], film.frames[film.frames.length - 1]],
-      measured: `something is moving ${(share * 100).toFixed(0)}% of the time`,
-      need: `at least ${(options.warnBelow * 100).toFixed(0)}%`,
+      measured: `something changes over at least 1% of the canvas on only ${(share * 100).toFixed(0)}% of the frames`,
+      need: `something changing on at least ${(options.warnBelow * 100).toFixed(0)}% of the frames`,
       severity: share < options.errorBelow ? "error" : "warn",
     });
   },
@@ -48,9 +56,19 @@ export const deadAir = defineRule({
   options: { share: 0.01, warnAfter: 1.0, errorAfter: 2.0, endHold: 2.5 },
   docs: {
     summary:
-      "There is never more than about a second where nothing meaningful moves.",
-    why: "A frame that stays frozen looks like the video has stalled. A slow zoom or drift isn't counted as movement, because it doesn't show the viewer anything new. The final hold on a logo or end card may be still.",
-    fix: "Keep the shot alive with content (a build, a detail revealed, the next element arriving), make a deliberate eased camera move to the next subject, or cut to the next section sooner.",
+      "The film never goes more than 1.0 s without something changing over at least 1% of the canvas (an error after 2.0 s), except for a still ending of up to 2.5 s.",
+    why: "A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.",
+    fix: "Add change to the still stretch (bring in the next element, reveal a detail, or animate part of what's shown), zoom toward the next thing that matters with an eased move, or start the next section sooner.",
+    options: {
+      share:
+        "The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing.",
+      warnAfter:
+        "The longest time, in seconds, the film may go without change before the rule reports a warning.",
+      errorAfter:
+        "The time, in seconds, without change after which the finding is an error instead of a warning.",
+      endHold:
+        "How long, in seconds, the film may stay unchanged at its very end without a finding.",
+    },
   },
   check({ film, options, report }) {
     const act = film.activity();
@@ -64,8 +82,8 @@ export const deadAir = defineRule({
       if (b >= last - 1 && seconds <= options.endHold) continue;
       report({
         frames: [a, b],
-        measured: `nothing meaningful moves for ${seconds.toFixed(1)} s`,
-        need: `at most ${options.warnAfter} s of stillness`,
+        measured: `nothing changes over 1% or more of the canvas for ${seconds.toFixed(1)} s`,
+        need: `no more than ${options.warnAfter} s without change`,
         severity: seconds > options.errorAfter ? "error" : "warn",
       });
     }
@@ -79,9 +97,15 @@ export const longShot = defineRule({
   options: { bigChange: 0.08, seconds: 3.5 },
   docs: {
     summary:
-      "A shot is held for a few seconds at most before the composition changes.",
-    why: "When one frame shows three things in turn, the film feels like a slideshow. Three short sections that each show one thing keep the film moving and give each idea its own moment.",
-    fix: "Split the shot: give each thing it shows its own section, or move the camera (push in on what changes, pan to the next element) instead of changing details inside a still frame.",
+      "At least every 3.5 s, something changes substantially over at least 8% of the canvas.",
+    why: "When the same layout stays on screen while three things happen in it one after another, the film feels like a slideshow. Three short sections that each show one thing keep the film moving and give each idea its own moment. A change counts as substantial when an element moves faster than 45 px/s at 1080p, resizes, appears, disappears, fades quickly or changes its text; small fades and slow drift don't count.",
+    fix: "Give each thing the layout shows its own section, or zoom in on the part that changes and move across to the next element, instead of changing details inside a layout that stays still.",
+    options: {
+      bigChange:
+        "The minimum share of the canvas (0.08 is 8%) that must change substantially for a frame to count as a large change.",
+      seconds:
+        "The longest time, in seconds, allowed between two large changes (or between the start or end of the film and the nearest one).",
+    },
   },
   check({ film, options, report }) {
     const big = activeFrames(film, options.bigChange, true);
@@ -91,8 +115,8 @@ export const longShot = defineRule({
       if (seconds > options.seconds)
         report({
           frames: [marks[i - 1], marks[i]],
-          measured: `one composition held for ${seconds.toFixed(1)} s with no big change`,
-          need: `a new section or camera move every ${options.seconds} s or less`,
+          measured: `for ${seconds.toFixed(1)} s, nothing changes substantially over a large part of the canvas`,
+          need: `a change over at least ${(options.bigChange * 100).toFixed(0)}% of the canvas at least every ${options.seconds} s`,
         });
     }
   },
@@ -105,15 +129,23 @@ export const smallAction = defineRule({
   options: { region: 0.06, surface: 0.25, seconds: 0.8 },
   docs: {
     summary:
-      "When the only thing happening is in a small part of a large still shot, the camera pushes in on it.",
-    why: "If someone is typing in an input at the bottom of a big empty window, the eye has nothing to do with the rest of the frame. The shot should be on the input.",
-    fix: "Push in (scale the composition about the action) or crop to the region that's changing, then pull back when the next thing happens elsewhere. The finding gives the region.",
+      "While a surface covering 25% to 95% of the canvas is visible, the substantial changes on screen are not all inside one region of 6% of the canvas or less for 0.8 s or longer. When they are, the view should zoom in on that region.",
+    why: "If someone is typing in an input at the bottom of a large, otherwise empty window, the viewer has nothing to look at in the rest of the canvas, and the text being typed is small. Zooming in on the input makes it large and shows only what matters. The rule takes, on each frame, the rectangle around everything that moves faster than 45 px/s at 1080p, resizes, appears, disappears, fades quickly or changes its text, and checks whether a surface (a window, card or panel) covering 25% to 95% of the canvas is visible at the same time.",
+    fix: "Zoom in by scaling the whole film's content about the region that's changing, or crop to it, then zoom back out when something happens elsewhere. The finding gives the region's size and position in px.",
+    options: {
+      region:
+        "The largest share of the canvas (0.06 is 6%) the changing region may cover for the rule to apply.",
+      surface:
+        "The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply.",
+      seconds:
+        "How long, in seconds, the change must stay inside a small region before the rule reports it.",
+    },
   },
   check({ film, options, report }) {
     const act = film.activity();
     const hits: [number, Box][] = [];
     for (const f of film.frames) {
-      // A drifting camera doesn't frame anything: judge where the substantial change is.
+      // Slow drift doesn't show anything: judge where the substantial change is.
       const a = act.get(f);
       if (!a?.bigRegion || a.bigShare <= 0) continue;
       const surfaces = surfacesAt(film, f, options.surface, 0.95);
@@ -126,7 +158,7 @@ export const smallAction = defineRule({
       3,
     )) {
       if ((b - a + 1) / film.fps < options.seconds) continue;
-      // The typical region, not their union: the action may move around inside the still shot.
+      // The typical region, not their union: the change may move around inside the large surface.
       const boxes = hits
         .filter((h) => h[0] >= a && h[0] <= b)
         .map((h) => h[1])
@@ -134,8 +166,8 @@ export const smallAction = defineRule({
       const r = boxes[Math.floor(boxes.length / 2)];
       report({
         frames: [a, b],
-        measured: `for ${((b - a + 1) / film.fps).toFixed(1)} s the only action is a ${r[2].toFixed(0)}x${r[3].toFixed(0)} region at (${r[0].toFixed(0)}, ${r[1].toFixed(0)}) inside a still surface`,
-        need: "the shot framed on where the action is",
+        measured: `for ${((b - a + 1) / film.fps).toFixed(1)} s, everything that changes is inside a ${r[2].toFixed(0)}x${r[3].toFixed(0)} px region at (${r[0].toFixed(0)}, ${r[1].toFixed(0)}) while a large surface is visible`,
+        need: `a view zoomed in or cropped so the changing region covers more than ${(options.region * 100).toFixed(0)}% of the canvas`,
       });
     }
   },
@@ -148,9 +180,14 @@ export const creep = defineRule({
   options: { seconds: 1.2, area: 0.03 },
   docs: {
     summary:
-      "There is no slow, constant zoom or pan on the whole frame added just to keep it moving.",
-    why: "A slow, constant zoom or pan makes the frame move without showing the viewer anything new, so it comes across as filler. A camera move should go to a subject (for example, push in on the action), ease, and settle. mographc doesn't count a creep as activity for `pace/activity`.",
-    fix: "Keep the hold alive with content (build the next element in, reveal a detail, bring in the next beat) or make the camera move a deliberate eased push to a subject that then settles.",
+      "Elements covering at least 3% of the canvas don't move or zoom slowly (slower than 45 px/s at 1080p and under 0.6% of their size per frame) for 1.2 s or longer.",
+    why: "A slow, steady zoom or pan makes the picture move without showing the viewer anything new, so it looks like filler. A zoom or pan should go toward something, such as the part of the canvas where something is happening, with an eased curve, and then come to rest. The slow end of a real move that just happened is not reported. `pace/activity` and `pace/dead-air` don't count this slow movement as change.",
+    fix: "Replace the slow movement with real change (bring in the next element, or reveal a detail), or make it an eased zoom or pan toward something specific that then comes to rest.",
+    options: {
+      seconds:
+        "How long, in seconds, the slow movement must last before the rule reports it.",
+      area: "The minimum share of the canvas (0.03 is 3%) the slowly moving elements must cover together.",
+    },
   },
   check({ film, options, report }) {
     const act = film.activity();
@@ -172,8 +209,8 @@ export const creep = defineRule({
           if (el.role !== "cursor") count.set(el, (count.get(el) ?? 0) + 1);
       const main = [...count].sort((x, y) => y[1] - x[1])[0]?.[0];
       if (!main) continue;
-      // The long settle at the end of a real move isn't a creep: it carries on from that move and
-      // slows to rest. A creep picks up speed on its own, or holds its pace.
+      // The long, slow end of a real move isn't reported: it carries on from that move and slows
+      // to a stop. Slow movement that is reported speeds up on its own, or keeps its pace.
       const rates: number[] = [];
       for (let f = a; f <= b; f += 1) {
         const s = main.at(f);
@@ -203,8 +240,8 @@ export const creep = defineRule({
       report({
         element: main,
         frames: [a, b],
-        measured: `creeps for ${seconds.toFixed(1)} s${Math.abs(zoom) > 0.1 ? `, zooming ${zoom.toFixed(1)}% a second` : ""}: too slow to read as a move`,
-        need: "a deliberate eased move, or content that moves",
+        measured: `moves slowly and steadily for ${seconds.toFixed(1)} s${Math.abs(zoom) > 0.1 ? `, zooming ${zoom.toFixed(1)}% a second` : ""}, slower than 45 px/s at 1080p`,
+        need: "either an eased move faster than 45 px/s at 1080p that comes to rest, or no movement",
       });
     }
   },

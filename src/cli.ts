@@ -21,28 +21,32 @@ import { runFiles } from "./runner.ts";
 import type { Finding } from "./rule.ts";
 import type { RawFilm } from "./types.ts";
 
-const HELP = `mographc: a compiler, linter and test runner for Remotion films.
+const HELP = `mographc: a compiler, linter and test framework for Remotion films.
 
 Usage: mographc <command> [compositions...] [options]
 
 Commands
-  verify      the compiler, the linter and your *.mographc.ts files. Exit 1 on any error.
-  check       the compiler only: what's broken in any video
-  lint        the compiler and your configured rules (mographc.config.ts, or "recommended")
-  test        your *.mographc.ts test files
-  elements    every element mographc sees: id, role, when it's on screen. Use it to tag and to write tests.
-  rules       every rule, with what it checks
-  explain     one rule in full: what, why, how to fix
-  baseline    "baseline save [compositions]": the current cut becomes the approved one regressions are measured against
-  init        write a mographc.config.ts and an example test
+  verify      Run check, lint and test. Exits with 1 if there is any error or failing test.
+  check       Run only the compiler rules, which report broken things such as images that didn't load.
+  lint        Run the compiler rules and the rules in mographc.config.ts (or the "recommended" preset if there is no config).
+  test        Run your *.mographc.ts test files.
+  elements    List every element mographc finds, with its tag or description, role, and the times it's on screen.
+  rules       List every built-in rule with a one-line summary.
+  explain     Print one rule's full documentation: what it checks, why, how to fix a finding, and its options.
+  baseline    "mographc baseline save [compositions...]" saves the current measurements as the baseline that the regression rules compare against.
+  init        Write a mographc.config.ts and an example test file.
+
+Composition ids limit the run to those compositions. By default every composition is checked.
 
 Options
-  --entry <file>     the Remotion entry point (default: remotion.config.ts's, or src/index.ts)
-  --config <file>    a config file other than mographc.config.ts
-  --frames <a-b>     only these frames
-  --json             machine-readable output
-  --warnings=false   only errors
-  --no-cache         re-capture even if the sources haven't changed
+  --entry <file>     The Remotion entry point. Default: the one set in remotion.config.ts, or src/index.ts.
+  --config <file>    Use this config file instead of mographc.config.ts.
+  --frames <a-b>     Only check frames a to b.
+  --json             Print findings as JSON.
+  --warnings=false   Print errors only.
+  --no-cache         Measure the film again even if its source files haven't changed.
+
+Documentation: https://github.com/replicas-group/mographc/tree/main/docs
 `;
 
 const args = process.argv.slice(2);
@@ -144,7 +148,7 @@ const runTests = async (root: string) => {
   walk(root);
   if (!files.length) {
     console.log(
-      'no tests yet: write what each beat means in a *.mographc.ts file (run "mographc init" for an example)',
+      'No test files found. Tests go in files ending in .mographc.ts; run "mographc init" to write an example.',
     );
     return 0;
   }
@@ -206,7 +210,7 @@ const main = async (): Promise<number> => {
               kind: r.kind,
               severity: r.severity,
               options: r.options,
-              ...r.docs,
+              docs: r.docs,
             })),
             null,
             1,
@@ -222,11 +226,22 @@ const main = async (): Promise<number> => {
     case "explain": {
       const r = allRules().find((x) => x.id === positional[1]);
       if (!r) {
-        console.error(`No rule "${positional[1]}". Run \`mographc rules\`.`);
+        console.error(
+          `There is no rule called "${positional[1]}". Run \`mographc rules\` to list them.`,
+        );
         return 2;
       }
       console.log(
-        `${r.id} (${r.kind === "check" ? "compiler, always on" : `default: ${r.severity}`})\n\n${r.docs.summary}\n\nWhy: ${r.docs.why}\n\nFix: ${r.docs.fix}${Object.keys(r.options).length ? `\n\nOptions: ${JSON.stringify(r.options)}` : ""}`,
+        `${r.id} (${r.kind === "check" ? "compiler, always on" : `default: ${r.severity}`})\n\n${r.docs.summary}\n\nWhy: ${r.docs.why}\n\nFix: ${r.docs.fix}${
+          Object.keys(r.options).length
+            ? `\n\nOptions:\n${Object.entries(r.options)
+                .map(
+                  ([k, v]) =>
+                    `  ${k} (default ${JSON.stringify(v)})${r.docs.options?.[k] ? `: ${r.docs.options[k]}` : ""}`,
+                )
+                .join("\n")}`
+            : ""
+        }`,
       );
       return 0;
     }
@@ -253,7 +268,7 @@ const main = async (): Promise<number> => {
       if (!existsSync(config)) {
         writeFileSync(
           config,
-          `import { defineConfig, recommended } from "mographc";\n\nexport default defineConfig([\n  recommended,\n  // Override a rule: { rules: { "easing/weak-out": ["error", { long: 0.45 }] } },\n  // Accept a finding for a stretch of time, with why: { between: [9.5, 13], rules: { "staging/no-padding": "off" }, reason: "…" },\n]);\n`,
+          `import { defineConfig, recommended } from "mographc";\n\nexport default defineConfig([\n  recommended,\n  // Change a rule's severity or options: { rules: { "easing/weak-out": ["error", { long: 0.45 }] } },\n  // Turn a rule off between two times (in seconds), with the reason: { between: [9.5, 13], rules: { "staging/no-padding": "off" }, reason: "…" },\n]);\n`,
         );
         console.log(`wrote ${path.relative(process.cwd(), config)}`);
       }
@@ -261,7 +276,7 @@ const main = async (): Promise<number> => {
       if (!existsSync(test)) {
         writeFileSync(
           test,
-          `import { describe, expect, loadFilm, test } from "mographc/test";\n\n// Write down what each beat means. Tag elements with data-motion="role:name" to find them here.\nconst film = await loadFilm("YourComposition");\n\ndescribe("the film", () => {\n  test("passes the compiler and the linter", async () => {\n    await expect(film).toPassLint();\n  });\n});\n`,
+          `import { describe, expect, loadFilm, test } from "mographc/test";\n\n// Write down what each section of the film is meant to show. Tag elements with data-motion="role:name" to find them here.\nconst film = await loadFilm("YourComposition");\n\ndescribe("the film", () => {\n  test("passes the compiler and the linter", async () => {\n    await expect(film).toPassLint();\n  });\n});\n`,
         );
         console.log(`wrote ${path.relative(process.cwd(), test)}`);
       }

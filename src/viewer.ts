@@ -5,7 +5,7 @@
  * - Everything legible is a read: a line of text, followed across frames by its words (it may
  *   move, grow as it's typed, or change a few words). Reading takes time: about 3.5 words a second.
  * - The eye goes where something new happens. A new line, a surface arriving or the cursor
- *   setting off pulls it, unless it's busy with something more compelling (reading beats small
+ *   setting off pulls it, unless it's busy with something more compelling (reading wins over small
  *   motion; a big arrival or a headline interrupts reading). A jump costs a moment with no reading.
  * - When nothing new happens, the eye goes to the next unread line (largest type first, then in
  *   reading order), or follows what's moving.
