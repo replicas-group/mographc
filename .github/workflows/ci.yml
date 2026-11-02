@@ -22,6 +22,8 @@ jobs:
       - run: npm ci
       - name: Typecheck and lint
         run: npm run check
+      - name: Rules reference is up to date
+        run: npm run docs:rules && git diff --exit-code docs/rules.md
       - name: Install the packed package into the demo
         run: |
           npm pack

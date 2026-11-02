@@ -17,7 +17,7 @@ npm i -D mographc
 npx mographc init          # writes mographc.config.ts and an example test
 ```
 
-mographc runs on Node 22.13 or later and uses the project's own copy of Remotion, so the versions always match. If the film has a brand to follow, add a brand preset to `mographc.config.ts` (see `examples/brand-preset/` in the mographc repository).
+mographc runs on Node 22.13 or later and uses the project's own copy of Remotion, so the versions always match. If the film has a brand to follow, add a brand preset to `mographc.config.ts` (see "Adding a rule or a brand preset" below).
 
 ## 2. Plan before you animate
 
@@ -112,3 +112,12 @@ mographc only catches problems that can be measured, so also do the following be
 When a person approves a cut, run `npx mographc baseline save`. After that, `lint` also reports anything that has become measurably worse than the approved cut, such as content removed from a beat, a weaker ease-out, or a smaller cursor.
 
 When a person gives a note that the tool didn't catch, add a rule or a test for it so it can't happen again. If the note applies to films in general, consider proposing it as a rule in the mographc repository.
+
+## Adding a rule or a brand preset
+
+When a person asks for a check that applies to every film in a project (for example "our logo always has clear space around it" or "only these colours"), write a lint rule rather than a test, because a rule runs on every composition without anyone having to remember it. A test is the better fit for something specific to one film, such as a click at a particular time.
+
+- Write the rule with `defineRule` from `mographc`, using the film model and the `px` and `area` helpers. The API is described in `node_modules/mographc/docs/writing-rules.md`.
+- Put it in the project (for example `rules/logo-clearspace.ts`) and turn it on in `mographc.config.ts` with `plugins` and `rules`, as described in `node_modules/mographc/docs/configuration.md`.
+- For a set of brand rules, group them into a preset: a config block with the rules in `plugins` and their severities in `rules`. [examples/brand-preset](https://github.com/replicas-group/mographc/tree/main/examples/brand-preset) is a complete example to copy.
+- Check the new rule both ways: run `npx mographc lint` on a film that should break it and confirm it's reported, and on one that shouldn't and confirm nothing new is reported.

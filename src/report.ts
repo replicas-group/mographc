@@ -25,7 +25,7 @@ export const wrap = (
   columns = width,
   first = indent,
 ) => {
-  if (!columns || columns - Math.max(indent, first) < 30) return [text];
+  if (!columns || columns - indent < 30) return [text];
   const lines = [""];
   for (const word of text.split(" ")) {
     const line = lines[lines.length - 1];

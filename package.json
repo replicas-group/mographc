@@ -35,6 +35,7 @@
   },
   "files": [
     "dist",
+    "docs",
     "skills",
     "README.md",
     "LICENSE"
@@ -50,7 +51,7 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
     "check": "tsc && eslint src examples/brand-preset",
     "prepare": "npm run build",
-    "docs:output": "npm run build && node scripts/render-output.mjs",
+    "docs:rules": "npm run build && node scripts/rules-reference.mjs && prettier --write docs/rules.md",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
