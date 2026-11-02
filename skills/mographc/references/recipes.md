@@ -31,9 +31,45 @@ export const tween = (
 
 Viewers judge how heavy an object is by how long it takes to move, so the duration should suit the object: at 30 fps, a small chip can move into place in 6 to 8 frames (0.2 to 0.27 s), while a window travelling half the canvas should take 20 to 30 frames (0.67 to 1 s). The longer a move, the more strongly it must slow down at the end. `easing/weak-out` requires an ease-out strength (the share of the move's time spent on its last 20% of distance) of at least 0.26 for moves under 0.4 s, 0.33 for moves of 0.4 to 0.8 s, and 0.40 for moves of 0.8 s or longer. For moves of 0.8 s or longer, use a curve that ends flat, like `move` or `arrive`.
 
+`easing/harsh-settle` also limits how hard a move that starts and ends on the canvas brakes after its top speed: a warning above 18,000 px/s² at 1080p and an error above 27,000 px/s². It applies to every element except cursors and text. Curves that do most of their travel early, such as `bezier(0.12, 1, 0.24, 1)`, brake hardest, so they need more time than a symmetric curve over the same distance. The tables give what the rule measures for common curves, durations and distances at 1080p and 30 fps. Pick a cell that passes:
+
+**200 px**
+
+| Curve                               | 0.2 s       | 0.3 s       | 0.4 s     | 0.5 s     | 0.6 s    | 0.8 s  | 1.0 s  |
+| ----------------------------------- | ----------- | ----------- | --------- | --------- | -------- | ------ | ------ |
+| `move`, `bezier(0.4, 0, 0.2, 1)`    | 23k warn    | passes      | passes    | passes    | passes   | passes | passes |
+| `bezier(0.33, 1, 0.68, 1)`          | passes      | passes      | passes    | passes    | passes   | passes | passes |
+| `bezier(0.22, 1, 0.36, 1)`          | not checked | 26k warn    | passes    | passes    | passes   | passes | passes |
+| `arrive`, `bezier(0.16, 1, 0.3, 1)` | not checked | not checked | 26k warn  | 19k warn  | passes   | passes | passes |
+| `bezier(0.12, 1, 0.24, 1)`          | not checked | not checked | 36k error | 28k error | 22k warn | passes | passes |
+
+**400 px**
+
+| Curve                               | 0.2 s       | 0.3 s       | 0.4 s     | 0.5 s     | 0.6 s     | 0.8 s     | 1.0 s    |
+| ----------------------------------- | ----------- | ----------- | --------- | --------- | --------- | --------- | -------- |
+| `move`, `bezier(0.4, 0, 0.2, 1)`    | 46k error   | 28k error   | 18k warn  | passes    | passes    | passes    | passes   |
+| `bezier(0.33, 1, 0.68, 1)`          | 45k error   | 23k warn    | passes    | passes    | passes    | passes    | passes   |
+| `bezier(0.22, 1, 0.36, 1)`          | not checked | 52k error   | 32k error | 20k warn  | passes    | passes    | passes   |
+| `arrive`, `bezier(0.16, 1, 0.3, 1)` | not checked | not checked | 52k error | 38k error | 28k error | passes    | passes   |
+| `bezier(0.12, 1, 0.24, 1)`          | not checked | not checked | 72k error | 56k error | 44k error | 29k error | 20k warn |
+
+**800 px**
+
+| Curve                               | 0.2 s       | 0.3 s       | 0.4 s      | 0.5 s      | 0.6 s     | 0.8 s     | 1.0 s     |
+| ----------------------------------- | ----------- | ----------- | ---------- | ---------- | --------- | --------- | --------- |
+| `move`, `bezier(0.4, 0, 0.2, 1)`    | 92k error   | 56k error   | 37k error  | 26k warn   | 19k warn  | passes    | passes    |
+| `bezier(0.33, 1, 0.68, 1)`          | 90k error   | 45k error   | 27k error  | passes     | passes    | passes    | passes    |
+| `bezier(0.22, 1, 0.36, 1)`          | not checked | 104k error  | 63k error  | 41k error  | 29k error | passes    | passes    |
+| `arrive`, `bezier(0.16, 1, 0.3, 1)` | not checked | not checked | 105k error | 75k error  | 56k error | 33k error | 22k warn  |
+| `bezier(0.12, 1, 0.24, 1)`          | not checked | not checked | 144k error | 112k error | 89k error | 58k error | 40k error |
+
+- Moves under 100 px pass with any of these curves from 0.2 s.
+- "not checked" means the move covers its distance in under 0.2 s of visible motion, so the rule skips it. It still stops as abruptly as the cells to its right, so don't use it for a surface.
+- Over 400 px, use `bezier(0.33, 1, 0.68, 1)` or `move` for 0.5 to 0.8 s. Keep the strongly decelerating curves (`arrive` and steeper) for entrances from off the canvas, which the rule doesn't check, or give them 0.8 s or more.
+
 ## A camera that frames the action
 
-Wrap each section in a camera that frames the region where the action is (`staging/small-action`). Move the camera's centre and zoom between shots on one eased curve. Every camera move should go to a specific element, slow down, and stop there. Don't add a slow, constant zoom or pan to make a still shot look like it's moving: it isn't counted as change, and `camera/creep` reports it when it lasts 1.2 s or more. While a shot stays still, keep the content changing instead.
+Wrap each section in a camera that frames the region where the action is (`staging/small-action`). Put the captions of a section inside the camera too if the camera moves while they're read: the simulated viewer follows text that moves with the camera, but a push behind a caption fixed on the canvas takes the eye off the caption, because every surface starts to move at once. Otherwise, move the camera before or after the caption is read. Move the camera's centre and zoom between shots on one eased curve. Every camera move should go to a specific element, slow down, and stop there. Don't add a slow, constant zoom or pan to make a still shot look like it's moving: it isn't counted as change, and `camera/creep` reports it when it lasts 1.2 s or more. While a shot stays still, keep the content changing instead.
 
 ```tsx
 type Shot = { at: number; x: number; y: number; scale: number }; // frame, the canvas point to centre, zoom

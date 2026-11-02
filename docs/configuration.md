@@ -34,6 +34,8 @@ A block with `between` turns a rule off, or changes its [severity](terms.md#chec
 <div data-motion="cursor:agent" data-motion-ignore="cursor/dead-exit: it turns into the share button">
 ```
 
+To accept findings from more than one rule on the same element, separate them with semicolons, each with its own reason: `data-motion-ignore="cursor/dead-exit: it turns into the share button; cursor/pops-in: it starts on the button it just clicked"`. A rule id of `*` accepts every rule's findings on the element.
+
 [Accepted findings](terms.md#checking) are still printed, marked `ok` with their reason, but they never fail the run. They stay visible so that when a reason stops being true, someone reading the output can notice and remove the suppression.
 
 To see every rule and its default severity, run `mographc rules` or read the [rules reference](rules.md).
