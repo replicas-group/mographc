@@ -220,6 +220,33 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
           row.ps = ps.stroke;
       }
       row.d = el.querySelector("path")?.getAttribute("d")?.slice(0, 120) ?? "";
+      // Where its open strokes (lines, leader lines) start and end on the canvas.
+      const strokes: number[][] = [];
+      for (const shape of Array.from(
+        el.querySelectorAll("path, line, polyline"),
+      )) {
+        const ss = getComputedStyle(shape);
+        const geometry = shape as SVGGeometryElement;
+        const matrix = geometry.getScreenCTM();
+        const length = geometry.getTotalLength();
+        if (
+          strokes.length >= 8 ||
+          ss.stroke === "none" ||
+          !(parseFloat(ss.strokeWidth) > 0) ||
+          Number(ss.opacity) < 0.01 ||
+          !matrix ||
+          !length
+        )
+          continue;
+        const end = (at: number) => {
+          const p = geometry.getPointAtLength(at);
+          const q = new DOMPoint(p.x, p.y).matrixTransform(matrix);
+          return local([q.x, q.y, 0, 0]).slice(0, 2).map(r1);
+        };
+        strokes.push([...end(0), ...end(length)]);
+      }
+      if (strokes.length)
+        row.sk = strokes as [number, number, number, number][];
     }
     const img = el as HTMLImageElement;
     if (el.tagName === "IMG" && img.complete && !img.naturalWidth) row.br = 1;

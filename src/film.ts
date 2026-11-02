@@ -19,6 +19,7 @@ export type Role =
   | "button"
   | "graphic"
   | "logo"
+  | "marker"
   | (string & {});
 
 /** Tag vocabulary: the names authors reach for, mapped to the roles rules understand. */
@@ -44,6 +45,9 @@ const ROLE_ALIASES: Record<string, Role> = {
   target: "button",
   link: "button",
   logo: "logo",
+  marker: "marker",
+  highlight: "marker",
+  annotation: "marker",
   icon: "graphic",
   graphic: "graphic",
 };

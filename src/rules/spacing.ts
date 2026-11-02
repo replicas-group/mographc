@@ -13,7 +13,7 @@ import {
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
 import { viewer } from "../viewer.ts";
-import { contains, frames as framesIn, px, runs } from "./util.ts";
+import { contains, frames as framesIn, overlay, px, runs } from "./util.ts";
 
 /** Whether a box is standing still (moving under 2 px a frame), so its position is deliberate rather than part of a move. */
 const held = (el: Element, f: number) => {
@@ -242,12 +242,12 @@ export const tightSpacing = defineRule({
   options: { ratio: 0.5, seconds: 0.5 },
   docs: {
     summary:
-      "Text standing still is at least 0.5 times its font size away from the text above or below it, and from a box (a panel, bubble, code block or button) beside, above or below it; with two texts, the larger font size counts. Gaps held for less than 0.5 s are ignored.",
-    why: "Text squeezed against the next line or the next box reads as one crowded block, and on a small screen the two run together. `staging/no-padding` only measures text against the edges of the box it is inside; this rule measures the gap between neighbours: a heading and the panel under it, a chat bubble and the command line under it, a caption and the line after it. The threshold comes from line spacing: inside a paragraph set at a line height of 1.2 to 1.5, the gap between one line's letters and the next is at most about 0.4 times the font size, so two separate blocks closer than 0.5 times the font size read as lines of one paragraph rather than as two things. The larger font size counts because a heading's spacing is judged at its own size. Lines of the same font size and family stacked within 0.6 times their font size are one paragraph and aren't compared with each other, and pieces of text side by side on one line are one line. Text that paints its own background or border (a chat bubble, a button) is measured by that painted box, and text clipped by a container by its visible part. A box counts when it is at least 2 font sizes wide and 1.5 font sizes tall (for a box beside the text rather than above or below it, at least 3 font sizes tall, so an icon or a tag next to a word is left alone), and isn't the box the text is inside. The rule checks text at least 10 px tall at 1080p above 50% opacity, in frames where both the text and its neighbour moved less than 1 px since the previous frame.",
+      "Text standing still is at least 0.5 times its font size away from the text above or below it, and from a box (a panel, bubble, code block or button) beside, above or below it; with two texts, the larger font size counts, unless it is at least twice the smaller one. Gaps held for less than 0.5 s are ignored.",
+    why: "Text squeezed against the next line or the next box reads as one crowded block, and on a small screen the two run together. `staging/no-padding` only measures text against the edges of the box it is inside; this rule measures the gap between neighbours: a heading and the panel under it, a chat bubble and the command line under it, a caption and the line after it. The threshold comes from line spacing: inside a paragraph set at a line height of 1.2 to 1.5, the gap between one line's letters and the next is at most about 0.4 times the font size, so two separate blocks closer than 0.5 times the font size read as lines of one paragraph rather than as two things. Between two texts the larger font size counts, because a heading's spacing is judged at its own size; but when one is at least twice the size of the other (a large title over its subtitle), the difference in size already sets them apart, and the smaller size counts. Lines of the same font size and family stacked within 0.6 times their font size are one paragraph and aren't compared with each other, and pieces of text side by side on one line are one line. A label right above or below the box it names (a speaker's name over their chat bubble, a caption under an image) isn't crowding it: one line of at most 4 words, at most 0.8 times the size of the text in the box (or of 40 px at 1080p when the box has no text), with its left edge, right edge or centre within one font size of the box's. Text that paints its own background or border (a chat bubble, a button) is measured by that painted box, and text clipped by a container by its visible part. Cursors and markers (elements tagged `marker`, `highlight` or `annotation`, such as a ring drawn around a card to point it out) are drawn over the layout rather than part of it, so neither they nor anything inside them count as neighbours. A box counts when it is at least 2 font sizes wide and 1.5 font sizes tall (for a box beside the text rather than above or below it, at least 3 font sizes tall, so an icon or a tag next to a word is left alone), and isn't the box the text is inside. The rule checks text at least 10 px tall at 1080p above 50% opacity, in frames where both the text and its neighbour moved less than 1 px since the previous frame.",
     fix: "Add space between the two: a margin or gap of at least the required size (the finding gives it in px), or move one of them. If the two belong together, set them as one paragraph in the same font size, or put the text inside the box with padding.",
     options: {
       ratio:
-        "The smallest gap allowed, as a multiple of the font size (with two texts, the larger one).",
+        "The smallest gap allowed, as a multiple of the font size (with two texts, the larger one, or the smaller one when the larger is at least twice its size).",
       seconds:
         "The shortest time, in seconds, a gap must stay too small to be reported.",
     },
@@ -278,13 +278,7 @@ export const tightSpacing = defineRule({
       };
       const rows = film
         .rows(f)
-        .filter(
-          (r) =>
-            r.o > 0.5 &&
-            !["cursor", "part", "label"].includes(
-              film.elementOf(f, r.k)?.role ?? "",
-            ),
-        );
+        .filter((r) => r.o > 0.5 && !overlay(film, f, r.k));
       const texts = rows.filter(
         (r) =>
           r.t === "t" &&
@@ -361,6 +355,24 @@ export const tightSpacing = defineRule({
         }
         hits.set(id, h);
       };
+      /**
+       * A label naming the box right above or below it (a speaker's name over their bubble, a
+       * caption under an image): one short line, at most 0.8 times the size of the text in the box (or
+       * of display type, when the box has none), lined up with the box's left edge, right edge or centre.
+       */
+      const caption = (i: number, tb: Box, box: Box, boxSize: number) => {
+        const t = texts[i];
+        const fs = t.fs!;
+        const x = [tb[0], tb[0] + tb[2], tb[0] + tb[2] / 2];
+        const y = [box[0], box[0] + box[2], box[0] + box[2] / 2];
+        return (
+          !t.pb &&
+          t.v[3] <= 1.6 * fs &&
+          words(i).split(/\s+/).length <= 4 &&
+          fs <= 0.8 * (boxSize || px(film, 40)) &&
+          x.some((v, k) => Math.abs(v - y[k]) <= fs)
+        );
+      };
       texts.forEach((t, i) => {
         const tb = outline(t);
         // The text below it, from another block.
@@ -375,7 +387,14 @@ export const tightSpacing = defineRule({
           )
             return;
           const gap = ob[1] - (tb[1] + tb[3]);
-          const need = options.ratio * Math.max(t.fs!, o.fs!);
+          // A title at least twice its subtitle's size is set apart by size: the smaller one counts.
+          const [lo, hi] = [t.fs!, o.fs!].sort((a, b) => a - b);
+          const need = options.ratio * (hi >= 2 * lo ? lo : hi);
+          if (
+            (o.pb && caption(i, tb, o.pb, o.fs!)) ||
+            (t.pb && caption(j, ob, t.pb, t.fs!))
+          )
+            return;
           if (gap >= 0 && gap < need)
             hit(i, o.k, name(o.k, words(j), !!o.pb), "above", gap, need);
         });
@@ -404,6 +423,19 @@ export const tightSpacing = defineRule({
                 : [Infinity, ""];
           if (gap < 0 || gap >= need) continue;
           const j = texts.findIndex((o) => o.k === x.k);
+          const inside = rows.filter(
+            (r) => r.t === "t" && (r.k === x.k || isAncestor(x.k, r.k)),
+          );
+          if (
+            (side === "above" || side === "below") &&
+            caption(
+              i,
+              tb,
+              x.b,
+              inside.length ? Math.max(...inside.map((r) => r.fs ?? 0)) : 0,
+            )
+          )
+            continue;
           hit(
             i,
             x.k,

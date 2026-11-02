@@ -22,6 +22,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
   - `text`: any other text. Tags `text`, `caption` and `label`.
   - `button`: something that is clicked. Tags `button`, `target` and `link`.
   - `logo`: a logo. Tag `logo`.
+  - `marker`: something drawn over the film to point at or annotate another element, such as a ring around a card, an arrow or a highlight. Tags `marker`, `highlight` and `annotation`. Layout rules don't treat a marker, or anything inside it, as part of the layout.
   - `graphic`: an untagged image, SVG or small box.
 
   Any other role in a tag is kept as written, and only the rules that apply to every element check it.

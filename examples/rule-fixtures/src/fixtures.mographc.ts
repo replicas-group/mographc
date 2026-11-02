@@ -4,7 +4,11 @@ import { describe, expect, loadFilm, test } from "mographc/test";
 // Each problem has a film that shows it, which the rule must report, and a fixed film, which it
 // must not. Other rules may report other things in these small films; only the one named is checked.
 const cases: [rule: string, broken: string[], fixed: string[]][] = [
-  ["layout/tight-spacing", ["TightSpacing"], ["TightSpacingFixed"]],
+  [
+    "layout/tight-spacing",
+    ["TightSpacing"],
+    ["TightSpacingFixed", "TightSpacingAllowed"],
+  ],
   [
     "layout/text-overlap",
     ["BriefOverlap", "BriefOverlapFaded"],
@@ -18,6 +22,7 @@ const cases: [rule: string, broken: string[], fixed: string[]][] = [
       "SmallFocusFixed",
       "SmallFocusReread",
       "SmallFocusLinger",
+      "SmallFocusRelease",
       "SmallFocusLinked",
     ],
   ],

@@ -12,7 +12,7 @@ import {
 } from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
-import { frames as framesIn, px, runs, surfacesAt } from "./util.ts";
+import { frames as framesIn, overlay, px, runs, surfacesAt } from "./util.ts";
 
 export const titleOffCentre = defineRule({
   id: "staging/title-off-centre",
@@ -174,7 +174,7 @@ export const emptySurface = defineRule({
   docs: {
     summary:
       "A surface (a window, card or panel) covering 10% to 90% of the canvas that stands still for 1 s or longer is not mostly empty: it doesn't have content in only 3 or fewer of the 9 cells of a 3 × 3 grid laid over it while all that content fits in a box covering a third of the surface or less.",
-    why: "A large window that is mostly empty, with its content bunched in one corner or with nothing in it at all, spends the canvas on blank space: the content that matters is small, and the viewer's eye has nowhere to go in the rest of the frame. The rule divides the visible part of each surface above 90% opacity into a 3 × 3 grid, and counts a cell as filled when an element above 30% opacity lying inside the surface (any text, image or box, whether or not it is inside the surface in the page structure) reaches into it by at least a fifth of the cell's width and height, or by half of its own. Boxes that span 90% of the surface's width or height, such as a title bar, a sidebar or a background layer, don't count, though the text on them does. A surface is mostly empty when 3 or fewer cells are filled and the box around all its content covers at most 34% of the surface, so content gathered in one corner or along one edge is reported but a few elements spread across the surface are not. It only checks frames where the surface is whole on the canvas (a close-up that crops a surface at the canvas edge is framing, not an empty surface) and moved or resized by 1 px or less since the previous frame, and reports stretches of 1 s or longer.",
+    why: "A large window that is mostly empty, with its content bunched in one corner or with nothing in it at all, spends the canvas on blank space: the content that matters is small, and the viewer's eye has nowhere to go in the rest of the frame. The rule divides the visible part of each surface above 90% opacity into a 3 × 3 grid, and counts a cell as filled when an element above 30% opacity lying inside the surface (any text, image or box, whether or not it is inside the surface in the page structure) reaches into it by at least a fifth of the cell's width and height, or by half of its own. Boxes that span 90% of the surface's width or height, such as a title bar, a sidebar or a background layer, don't count, though the text on them does; neither do cursors or markers (elements tagged `marker`, `highlight` or `annotation`), which are drawn over the surface rather than being its content. A surface is mostly empty when 3 or fewer cells are filled and the box around all its content covers at most 34% of the surface, so content gathered in one corner or along one edge is reported but a few elements spread across the surface are not. It only checks frames where the surface is whole on the canvas (a close-up that crops a surface at the canvas edge is framing, not an empty surface) and moved or resized by 1 px or less since the previous frame, and reports stretches of 1 s or longer.",
     fix: "Make the surface fit its content (a smaller window or card), zoom in on the part of the surface that has content, or lay the content out to fill it with larger type or more of the real product's content. Bring a surface's content in together with it rather than holding it empty.",
     options: {
       surface:
@@ -216,9 +216,7 @@ export const emptySurface = defineRule({
                 r.t === "b" &&
                 (r.v[2] >= 0.9 * v[2] || r.v[3] >= 0.9 * v[3])
               ) &&
-              !["cursor", "part", "label"].includes(
-                film.elementOf(f, r.k)?.role ?? "",
-              ),
+              !overlay(film, f, r.k),
           )
           // Text that paints its own box (a button, an input) fills the whole box.
           .map((r) => intersect(r.pb ?? r.v, v));

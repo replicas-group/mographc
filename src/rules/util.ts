@@ -57,6 +57,18 @@ export const carried = (film: Film, frame: number, key: string) => {
   return false;
 };
 
+/** Drawn over the film rather than laid out in it (a cursor, or a marker such as a ring, arrow or
+ * highlight), or part of something that is. Layout rules don't treat these as neighbours or content. */
+export const overlay = (film: Film, frame: number, key: string) => {
+  const parts = key.split("/");
+  for (let i = parts.length; i > 1; i -= 1) {
+    const role = film.elementOf(frame, parts.slice(0, i).join("/"))?.role;
+    if (role && ["cursor", "part", "label", "marker"].includes(role))
+      return true;
+  }
+  return false;
+};
+
 export const contains = (outer: Box, inner: Box) =>
   inner[0] >= outer[0] &&
   inner[1] >= outer[1] &&

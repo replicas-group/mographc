@@ -5,6 +5,7 @@ import { CutText } from "./CutText";
 import { EmptySurface } from "./EmptySurface";
 import { SmallFocus } from "./SmallFocus";
 import { TightSpacing } from "./TightSpacing";
+import { TightSpacingAllowed } from "./TightSpacingAllowed";
 
 const film = { durationInFrames: 90, fps: 30, width: 1920, height: 1080 };
 
@@ -21,6 +22,11 @@ export const RemotionRoot: React.FC = () => (
       id="TightSpacingFixed"
       component={TightSpacing}
       defaultProps={{ fixed: true }}
+      {...film}
+    />
+    <Composition
+      id="TightSpacingAllowed"
+      component={TightSpacingAllowed}
       {...film}
     />
     <Composition
@@ -84,6 +90,13 @@ export const RemotionRoot: React.FC = () => (
       defaultProps={{ variant: "linger" as const }}
       {...film}
       durationInFrames={120}
+    />
+    <Composition
+      id="SmallFocusRelease"
+      component={SmallFocus}
+      defaultProps={{ variant: "release" as const }}
+      {...film}
+      durationInFrames={150}
     />
     <Composition
       id="SmallFocusLinked"

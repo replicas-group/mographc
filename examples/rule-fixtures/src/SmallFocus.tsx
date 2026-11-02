@@ -1,7 +1,7 @@
 import { useCurrentFrame } from "remotion";
 import { MONO, Stage, tween, Window } from "./ui";
 
-type Variant = "wide" | "pushed" | "reread" | "linger" | "linked";
+type Variant = "wide" | "pushed" | "reread" | "linger" | "release" | "linked";
 
 const REQUEST =
   "Review the open pull request and fix the failing checkout test";
@@ -11,7 +11,8 @@ const REQUEST =
 // - "pushed": the camera pushes in on the bubble;
 // - "reread": the request is read while pushed in, collapses, and comes back in a wide shot;
 // - "linger": a short status line is read while pushed in, then the camera pulls back;
-// - "linked": a finding joined by a leader line to a marker elsewhere in the window.
+// - "release": a longer status line the camera pushes in on, then pulls back from before it's read;
+// - "linked": a finding joined by a leader line, drawn in a canvas-sized svg, to a marker.
 export const SmallFocus: React.FC<{ variant: Variant }> = ({ variant }) => {
   const frame = useCurrentFrame();
   const bubbleIn = tween(frame, 10, 24, 0, 1);
@@ -22,7 +23,9 @@ export const SmallFocus: React.FC<{ variant: Variant }> = ({ variant }) => {
         ? 1 - tween(frame, 100, 115, 0, 1)
         : variant === "linger"
           ? 1 - tween(frame, 45, 60, 0, 1)
-          : 0;
+          : variant === "release"
+            ? 1 - tween(frame, 20, 35, 0, 1)
+            : 0;
   // The request collapses for over a second, then comes back.
   const shown =
     variant !== "reread"
@@ -66,7 +69,7 @@ export const SmallFocus: React.FC<{ variant: Variant }> = ({ variant }) => {
               }}
             />
           ))}
-          {variant === "linger" ? (
+          {variant === "linger" || variant === "release" ? (
             <div
               style={{
                 color: "#57606A",
@@ -76,7 +79,9 @@ export const SmallFocus: React.FC<{ variant: Variant }> = ({ variant }) => {
                 top: 150,
               }}
             >
-              Thought for 1s
+              {variant === "linger"
+                ? "Thought for 1s"
+                : "Thought for 1s while reading the cart module and its tests"}
             </div>
           ) : variant === "linked" ? (
             <>
@@ -97,18 +102,7 @@ export const SmallFocus: React.FC<{ variant: Variant }> = ({ variant }) => {
               >
                 error layout/text-cut at 2.4 s
               </div>
-              <svg
-                width={520}
-                height={300}
-                style={{
-                  left: 620,
-                  opacity: bubbleIn,
-                  position: "absolute",
-                  top: 140,
-                }}
-              >
-                <path d="M0 0 L500 280" stroke="#B42318" strokeWidth={3} />
-              </svg>
+
               <div
                 style={{
                   border: "4px solid #B42318",
@@ -144,6 +138,15 @@ export const SmallFocus: React.FC<{ variant: Variant }> = ({ variant }) => {
           )}
         </Window>
       </div>
+      {variant === "linked" && (
+        <svg
+          width={1920}
+          height={1080}
+          style={{ left: 0, opacity: bubbleIn, position: "absolute", top: 0 }}
+        >
+          <path d="M930 300 L1426 570" stroke="#B42318" strokeWidth={3} />
+        </svg>
+      )}
     </Stage>
   );
 };
