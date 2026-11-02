@@ -1,0 +1,90 @@
+{
+  "name": "mographc",
+  "version": "0.1.0",
+  "description": "A compiler, linter and test framework for motion graphics made with Remotion",
+  "keywords": [
+    "remotion",
+    "motion-graphics",
+    "video",
+    "linter",
+    "testing",
+    "animation"
+  ],
+  "homepage": "https://github.com/replicas-group/mographc#readme",
+  "bugs": "https://github.com/replicas-group/mographc/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/replicas-group/mographc.git"
+  },
+  "license": "MIT",
+  "author": "Replicas",
+  "type": "module",
+  "bin": {
+    "mographc": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./test": {
+      "types": "./dist/test.d.ts",
+      "default": "./dist/test.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.13.0 || >=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "check": "tsc && eslint src examples/brand-preset",
+    "prepare": "npm run build",
+    "docs:rules": "npm run build && node scripts/rules-reference.mjs && prettier --write docs/rules.md",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "jiti": "^2.7.0"
+  },
+  "peerDependencies": {
+    "@remotion/bundler": ">=4.0.0",
+    "@remotion/cli": ">=4.0.0",
+    "@remotion/renderer": ">=4.0.0",
+    "react": ">=18",
+    "remotion": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@remotion/bundler": {
+      "optional": true
+    },
+    "@remotion/renderer": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@remotion/bundler": "4.0.499",
+    "@remotion/cli": "4.0.499",
+    "@remotion/eslint-config-flat": "4.0.499",
+    "@remotion/renderer": "4.0.499",
+    "@types/node": "^22.20.5",
+    "@types/react": "19.2.7",
+    "eslint": "9.19.0",
+    "prettier": "3.8.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.499",
+    "typescript": "5.9.3"
+  }
+}

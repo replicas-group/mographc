@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tgz
+.DS_Store
+.env*
+!.env.example
+
+out/
+renders/
+.remotion/
+.cache/
+.mographc/
+
+# The repository keeps one lockfile, at the root. Examples resolve their dependencies on install.
+examples/*/package-lock.json

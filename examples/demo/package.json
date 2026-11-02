@@ -1,0 +1,23 @@
+{
+  "name": "mographc-demo",
+  "version": "1.0.0",
+  "description": "A short Remotion film for trying mographc",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "remotion studio",
+    "verify": "mographc verify Demo",
+    "verify:broken": "MOGRAPHC_FILM=DemoBroken mographc verify DemoBroken"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "mographc": "file:../..",
+    "typescript": "5.9.3"
+  }
+}
