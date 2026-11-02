@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported version, and the current LTS lines.
+        node: ["22.13.0", "24", "26"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Typecheck and lint
+        run: npm run check
+      - name: Install the packed package into the demo
+        run: |
+          npm pack
+          cd examples/demo
+          npm install
+          npm install --no-save ../../mographc-*.tgz
+      - name: Smoke test
+        working-directory: examples/demo
+        run: |
+          npx mographc rules
+          npx mographc explain cursor/dead-exit
+          npm run verify
+          npx mographc lint Demo --config ../brand-preset/mographc.config.ts
+          if npm run verify:broken; then echo "DemoBroken should fail"; exit 1; fi
