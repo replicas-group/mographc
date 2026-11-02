@@ -17,6 +17,7 @@ import {
   centreOf,
   intersectArea,
   isAncestor,
+  readText,
   type Element,
   Film,
   type Sample,
@@ -26,7 +27,7 @@ import { format, width } from "./report.ts";
 import { expect, type Matcher } from "./runner.ts";
 import { needOut } from "./rules/util.ts";
 import type { Box } from "./types.ts";
-import { viewer } from "./viewer.ts";
+import { formatPath, gazePath, left, viewer } from "./viewer.ts";
 
 export {
   describe,
@@ -85,6 +86,32 @@ const inside = (p: { x: number; y: number }, b: Box, pad = 0) =>
   p.y <= b[1] + b[3] + pad;
 const sec = (el: Element, f: number) => `${(f / el.film.fps).toFixed(2)} s`;
 const name = (el: Element) => el.label;
+/** The simulated viewer's gaze between two frames, one indented line a stretch. */
+const path = (film: Film, from: number, to: number) => {
+  const lines = formatPath(film, gazePath(film, from, to));
+  return [
+    ...lines.slice(0, 15),
+    ...(lines.length > 15
+      ? [
+          `… ${lines.length - 15} more; run \`mographc gaze ${film.composition}\` for all of it`,
+        ]
+      : []),
+  ]
+    .map((l) => `  ${l}`)
+    .join("\n");
+};
+/** Its text and the text inside it, at its fullest, read as the viewer reads it: by position. */
+const textOf = (el: Element) => {
+  let best = "";
+  for (const f of el.frames) {
+    const k = el.at(f)!.raw.k;
+    const text = readText(
+      el.film.rows(f).filter((r) => r.x && (r.k === k || isAncestor(k, r.k))),
+    );
+    if (text.length > best.length) best = text;
+  }
+  return best;
+};
 const result = (pass: boolean, yes: string, no: string) => ({
   pass,
   message: () => (pass ? yes : no),
@@ -173,9 +200,9 @@ const matchers = {
     );
   },
   /** Stays inside a box, or the title-safe area (the central 90%). */
-  toStayInside(el: Element, region: Box | "safe-area", when?: Time) {
+  toStayInside(el: Element, region: Box | "safe-area" | Element, when?: Time) {
     const film = el.film;
-    const box: Box =
+    const boxAt = (f: number): Box | undefined =>
       region === "safe-area"
         ? [
             film.width * 0.05,
@@ -183,10 +210,20 @@ const matchers = {
             film.width * 0.9,
             film.height * 0.9,
           ]
-        : region;
+        : Array.isArray(region)
+          ? region
+          : region.at(f)?.box;
+    const where =
+      region === "safe-area"
+        ? "safe area"
+        : Array.isArray(region)
+          ? "box"
+          : name(region);
     const out = span(el, when).filter((f) => {
       const s = el.at(f);
       if (!shown(s)) return false;
+      const box = boxAt(f);
+      if (!box) return true;
       const v = s!.visible;
       return (
         v[0] < box[0] ||
@@ -197,8 +234,8 @@ const matchers = {
     });
     return result(
       !out.length,
-      `expected ${name(el)} to go outside the ${region === "safe-area" ? "safe area" : "box"}`,
-      `expected ${name(el)} to stay inside the ${region === "safe-area" ? "safe area (the central 90% of the canvas)" : "box"}, but part of it is outside at ${out
+      `expected ${name(el)} to go outside the ${where}`,
+      `expected ${name(el)} to stay inside ${region === "safe-area" ? "the safe area (the central 90% of the canvas)" : Array.isArray(region) ? `the box [${region.join(", ")}]` : where}, but part of it is outside${typeof region === "object" && !Array.isArray(region) ? ", or it isn't on screen," : ""} at ${out
         .slice(0, 3)
         .map((f) => sec(el, f))
         .join(", ")}`,
@@ -334,7 +371,7 @@ const matchers = {
     return result(
       share >= need,
       `expected the simulated viewer not to be looking at ${name(el)}`,
-      `expected the simulated viewer to be looking at ${name(el)} for ${(need * 100).toFixed(0)}% of the time, but it is for ${(share * 100).toFixed(0)}%${top ? `; the rest of the time it mostly looks at ${top}` : ""}`,
+      `expected the simulated viewer to be looking at ${name(el)} for ${(need * 100).toFixed(0)}% of the time, but it is for ${(share * 100).toFixed(0)}%${top ? `; the rest of the time it mostly looks at ${top}` : ""}. Where it looks:\n${path(el.film, frames[0], frames[frames.length - 1])}`,
     );
   },
   /** A viewer finishes reading the text in it before it leaves. */
@@ -348,13 +385,25 @@ const matchers = {
         return !!s && !!t && isAncestor(s.raw.k, t.raw.k);
       }),
     );
-    const end = el.film.frames[el.film.frames.length - 1];
-    const missed = mine.filter((r) => r.to < end - 1 && r.words - r.read > 0.5);
+    const film = el.film;
+    const end = film.frames[film.frames.length - 1];
+    const missed = mine.filter(
+      (r) => r.to < end - 1 && r.words - r.read > Math.max(0.5, left(r)),
+    );
+    const own = textOf(el);
+    const words = (n: number) => n.toFixed(1).replace(/\.0$/, "");
     return result(
       !!mine.length && !missed.length,
       `expected some text in ${name(el)} to go unread`,
       mine.length
-        ? `expected the simulated viewer to finish reading the text in ${name(el)}, but ${missed.map((r) => `"${r.full.slice(0, 30)}" leaves at ${sec(el, r.to)} with ${Math.round(r.words - r.read)} of ${Math.round(r.words)} words unread`).join("; ")}`
+        ? `expected the simulated viewer to finish reading the text in ${name(el)}, but ${missed
+            .map(
+              (r) =>
+                `${own && r.full !== own && r.full.includes(own) ? `the viewer reads "${own.slice(0, 40)}" as part of the longer text "${r.full.slice(0, 60)}", which` : `"${r.full.slice(0, 40)}"`} leaves at ${sec(el, r.to + 1)} with ${words(r.words - r.read)} of ${words(r.words)} words unread`,
+            )
+            .join("; ")}. Where it looks while that text is on screen:\n${missed
+            .map((r) => path(film, r.from, r.to))
+            .join("\n")}`
         : `expected the simulated viewer to read the text in ${name(el)}, but it has no text large and visible enough to read`,
     );
   },
@@ -408,7 +457,7 @@ declare module "./runner.ts" {
       when: { at: number; tolerance?: number },
     ): void;
     toOverlap(other: Element, when?: Time): void;
-    toStayInside(region: Box | "safe-area", when?: Time): void;
+    toStayInside(region: Box | "safe-area" | Element, when?: Time): void;
     toHaveTextAtLeast(size: number, when?: Time): void;
     toMoveContinuously(): void;
     toEaseOut(when?: { between?: [number, number] }): void;

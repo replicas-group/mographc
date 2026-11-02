@@ -32,8 +32,8 @@ export const run = (
       baseline: options.baseline,
       options: { ...rule.options, ...ruleOptions },
       report(r) {
-        const from = film.seconds(r.frames[0]);
-        const to = film.seconds(r.frames[1]);
+        const from = +film.seconds(r.frames[0]).toFixed(3);
+        const to = +film.seconds(r.frames[1]).toFixed(3);
         const finding: Finding = {
           rule: rule.id,
           severity: r.severity && severity !== "warn" ? r.severity : severity,

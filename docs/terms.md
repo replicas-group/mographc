@@ -26,6 +26,8 @@ These are the terms mographc's documentation, rules and output use. Each one has
 
   Any other role in a tag is kept as written, and only the rules that apply to every element check it.
 
+  Two roles are only ever inferred, never given by a tag: `part`, an untagged element inside a tagged cursor (its arrow, its shadow), and `cursor-label`, untagged text that travels with a cursor, such as its name tag. The simulated viewer doesn't read text in a `cursor`, `part` or `cursor-label`; text tagged `label:` has the `text` role and is read like any other text.
+
 - **Film model**: mographc's record of a composition: every element on every frame, with its position and size (its box), the part of it that is visible, its opacity, stretch, text and tag. Rules and tests read the film model.
 - **Tip**: the point of a cursor that clicks, marked with a `data-motion-tip` element inside it.
 
@@ -40,7 +42,7 @@ These are the terms mographc's documentation, rules and output use. Each one has
 ## Reading
 
 - **Caption**: in the `attention/` rules, text at least 32 px tall at 1080p that isn't in a monospace font and isn't inside a surface. (As a tag, `caption` gives an element the `text` role.)
-- **Simulated viewer**: mographc's estimate of what a person watching the film looks at and reads. On each frame it picks the element the eye is most likely on (something that just appeared or moved, or the next unread line of text) and assumes a reading speed of 3.5 words a second. Rules under `attention/` and the `toBeRead` and `toBeTheFocus` matchers use it.
+- **Simulated viewer**: mographc's estimate of what a person watching the film looks at and reads. On each frame it picks the element the eye is most likely on (something that just appeared or moved, or the next unread line of text) and assumes a reading speed of 3.5 words a second. A line counts as read once 95% of its words are read. Rules under `attention/` and the `toBeRead` and `toBeTheFocus` matchers use it, and `mographc gaze` prints where it looks and what it reads over time.
 
 ## Checking
 

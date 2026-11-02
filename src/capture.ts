@@ -141,6 +141,78 @@ const sourceHash = (project: Project) => {
   return hash.digest("hex").slice(0, 12);
 };
 
+// What a minified React error number means, for the ones a film usually hits.
+const REACT_ERRORS: Record<string, string> = {
+  "130":
+    "a component is undefined, usually because it's imported by the wrong name or as a default export when it's a named one (or the other way round)",
+  "152": "a component returned undefined instead of JSX or null",
+  "185": "a component updates state while rendering, in an endless loop",
+};
+
+/**
+ * A render error with where it happened: the composition, the frame and time, and the stack
+ * mapped back to the project's own files through the bundle's source maps.
+ */
+const renderError = async (
+  project: Project,
+  serveUrl: string,
+  error: Error & { frame?: number },
+  composition?: { id: string; fps: number },
+) => {
+  const maps = new Map<string, unknown>();
+  let SourceMapConsumer:
+    | (new (raw: string) => {
+        originalPositionFor(p: { line: number; column: number }): {
+          source: string | null;
+          line: number | null;
+          column: number | null;
+        };
+      })
+    | undefined;
+  try {
+    // The project's own copy, which Remotion's renderer depends on.
+    ({ SourceMapConsumer } = createRequire(
+      resolveRemotion(project, "@remotion/renderer"),
+    )("source-map"));
+  } catch {
+    // Without it the stack is printed as the bundle has it.
+  }
+  const frames = (error.stack ?? "")
+    .split("\n")
+    .map((l) =>
+      l.match(/^\s*at (?:(.+?) \()?\S*?\/([^/\s:]+\.js):(\d+):(\d+)\)?$/),
+    )
+    .filter((m): m is RegExpMatchArray => !!m)
+    .map(async ([, fn, file, line, column]) => {
+      const map = path.join(serveUrl, `${file}.map`);
+      if (!SourceMapConsumer || !existsSync(map))
+        return `${fn ?? "<anonymous>"} (${file}:${line})`;
+      if (!maps.has(map))
+        maps.set(map, await new SourceMapConsumer(readFileSync(map, "utf8")));
+      const pos = (
+        maps.get(map) as InstanceType<NonNullable<typeof SourceMapConsumer>>
+      ).originalPositionFor({ line: Number(line), column: Number(column) - 1 });
+      if (!pos.source) return undefined;
+      const source = pos.source
+        .replace(/^webpack:\/\/[^/]*\//, "")
+        .replace(/^\.\//, "");
+      return `${fn ?? "<anonymous>"} (${source}:${pos.line})`;
+    });
+  const stack = (await Promise.all(frames)).filter((f): f is string => !!f);
+  // The project's own files first: that's where the fix is.
+  const own = stack.filter((f) => !f.includes("node_modules"));
+  const shown = (own.length ? own : stack).slice(0, 6);
+  const react = error.message.match(/Minified React error #(\d+)/)?.[1];
+  const where = composition
+    ? `${composition.id}: rendering ${error.frame === undefined ? "failed" : `frame ${error.frame} (${(error.frame / composition.fps).toFixed(2)} s) failed`}`
+    : "Reading the compositions failed";
+  return new Error(
+    `${where}: ${error.message}${react && REACT_ERRORS[react] ? `\nReact error #${react} means ${REACT_ERRORS[react]}.` : ""}${
+      shown.length ? `\n${shown.map((f) => `    at ${f}`).join("\n")}` : ""
+    }`,
+  );
+};
+
 export interface CaptureOptions {
   compositions?: string[];
   /** Frame range to capture, inclusive. */
@@ -149,6 +221,52 @@ export interface CaptureOptions {
   cache?: boolean;
   log?: (message: string) => void;
 }
+
+/** Bundle the project with every composition wrapped in the probe, and read its compositions. */
+const open = async (project: Project, log: (message: string) => void) => {
+  const { bundle } = await import(
+    resolveRemotion(project, "@remotion/bundler")
+  );
+  const { getCompositions, renderFrames } = await import(
+    resolveRemotion(project, "@remotion/renderer")
+  );
+  log("bundling");
+  const shim = fileURLToPath(new URL("./probe/shim.js", import.meta.url));
+  const serveUrl: string = await bundle({
+    entryPoint: project.entry,
+    webpackOverride: async (input: {
+      resolve?: { alias?: Record<string, string> };
+    }) => {
+      // The project's own override first (it may be async, e.g. Tailwind's), then ours on top.
+      const config = (
+        project.webpackOverride ? await project.webpackOverride(input) : input
+      ) as typeof input;
+      const alias = { ...config.resolve?.alias };
+      // Remotion aliases `remotion` to one copy; the shim takes that name and re-exports the same copy.
+      alias["remotion-original"] =
+        alias.remotion ??
+        path.dirname(project.require.resolve("remotion/package.json"));
+      alias.remotion = shim;
+      return { ...config, resolve: { ...config.resolve, alias } };
+    },
+  });
+  const all: {
+    id: string;
+    fps: number;
+    width: number;
+    height: number;
+    durationInFrames: number;
+  }[] = await getCompositions(serveUrl, { logLevel: "error" }).catch(
+    async (error: Error) => {
+      throw await renderError(project, serveUrl, error);
+    },
+  );
+  return { serveUrl, all, renderFrames };
+};
+
+/** The ids of the project's compositions, in the order they're registered. */
+export const compositionIds = async (project: Project) =>
+  (await open(project, () => {})).all.map((c) => c.id);
 
 /** Capture every requested composition's film, from cache when the sources haven't changed. */
 export const capture = async (
@@ -163,46 +281,13 @@ export const capture = async (
     "mographc",
   );
   const hash = sourceHash(project);
-  const { bundle } = await import(
-    resolveRemotion(project, "@remotion/bundler")
-  );
-  const { getCompositions, renderFrames } = await import(
-    resolveRemotion(project, "@remotion/renderer")
-  );
-
-  let serveUrl: string | undefined;
-  const serve = async () => {
-    if (serveUrl) return serveUrl;
-    log("bundling");
-    const shim = fileURLToPath(new URL("./probe/shim.js", import.meta.url));
-    serveUrl = await bundle({
-      entryPoint: project.entry,
-      webpackOverride: async (input: {
-        resolve?: { alias?: Record<string, string> };
-      }) => {
-        // The project's own override first (it may be async, e.g. Tailwind's), then ours on top.
-        const config = (
-          project.webpackOverride ? await project.webpackOverride(input) : input
-        ) as typeof input;
-        const alias = { ...config.resolve?.alias };
-        // Remotion aliases `remotion` to one copy; the shim takes that name and re-exports the same copy.
-        alias["remotion-original"] =
-          alias.remotion ??
-          path.dirname(project.require.resolve("remotion/package.json"));
-        alias.remotion = shim;
-        return { ...config, resolve: { ...config.resolve, alias } };
-      },
-    });
-    return serveUrl!;
-  };
-
-  const all = await getCompositions(await serve(), { logLevel: "error" });
+  const { serveUrl, all, renderFrames } = await open(project, log);
   const wanted = options.compositions?.length
     ? options.compositions.map((id) => {
-        const c = all.find((x: { id: string }) => x.id === id);
+        const c = all.find((x) => x.id === id);
         if (!c)
           throw new Error(
-            `There is no composition called "${id}". The compositions in this project are: ${all.map((x: { id: string }) => x.id).join(", ")}`,
+            `There is no composition called "${id}". The compositions in this project are: ${all.map((x) => x.id).join(", ")}`,
           );
         return c;
       })
@@ -232,7 +317,7 @@ export const capture = async (
       };
     });
     await renderFrames({
-      serveUrl: await serve(),
+      serveUrl,
       composition,
       imageFormat: "none",
       outputDir: null,
@@ -246,9 +331,13 @@ export const capture = async (
         const frame = JSON.parse(text.slice("MOGRAPHC ".length)) as RawFrame;
         frames.set(frame.f, frame);
       },
-    }).finally(() => {
-      methods.forEach((m, i) => (console[m] = originals[i]));
-    });
+    })
+      .catch(async (error: Error & { frame?: number }) => {
+        throw await renderError(project, serveUrl, error, composition);
+      })
+      .finally(() => {
+        methods.forEach((m, i) => (console[m] = originals[i]));
+      });
     const film: RawFilm = {
       composition: composition.id,
       fps: composition.fps,

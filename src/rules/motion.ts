@@ -385,7 +385,8 @@ export const harshSettle = defineRule({
     // 30 fps keys (every other frame a repeat) doesn't measure as braking on every frame.
     const w = Math.max(1, Math.round(film.fps / 15));
     for (const el of movers(film).filter(
-      (e) => e.role !== "text" && e.role !== "headline" && e.role !== "label",
+      (e) =>
+        e.role !== "text" && e.role !== "headline" && e.role !== "cursor-label",
     ))
       for (const m of judged(el)) {
         const s0 = el.at(m.from)!;

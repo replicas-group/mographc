@@ -43,7 +43,9 @@ export const titleOffCentre = defineRule({
       const items = film.elements
         .filter(
           (e) =>
-            !["cursor", "part", "label", "surface", "button"].includes(e.role),
+            !["cursor", "part", "cursor-label", "surface", "button"].includes(
+              e.role,
+            ),
         )
         .map((e) => e.at(f))
         .filter(

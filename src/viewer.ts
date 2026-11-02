@@ -7,6 +7,8 @@
  * - The eye goes where something new happens. A new line, a surface arriving or the cursor
  *   setting off pulls it, unless it's busy with something more compelling (reading wins over small
  *   motion; a big arrival or a headline interrupts reading). A jump costs a moment with no reading.
+ *   What moves along with the thing the eye is on (a camera push, a list scrolling) isn't new, and
+ *   neither is a number changing in place (a counter, a clock).
  * - When nothing new happens, the eye goes to the next unread line (largest type first, then in
  *   reading order), or follows what's moving.
  *
@@ -18,6 +20,7 @@ import {
   intersect,
   isAncestor,
   readText,
+  shapeOf,
   union,
   type Element,
   type Film,
@@ -38,6 +41,8 @@ export interface ViewerOptions {
   fovea: number;
   /** Time lost to each jump of the eye, in seconds. */
   saccade: number;
+  /** Share of a line's words after which it counts as read, so the eye doesn't go back for the last word. */
+  done: number;
 }
 
 export const VIEWER: ViewerOptions = {
@@ -47,6 +52,7 @@ export const VIEWER: ViewerOptions = {
   asks: 1.5,
   fovea: 0.15,
   saccade: 0.15,
+  done: 0.95,
 };
 
 /** A line of legible text, as a viewer meets it. */
@@ -73,8 +79,9 @@ export interface Read {
   /** The outermost product surface it's part of (the page), by key; none for captions. */
   surface?: string;
   elements: Set<Element>;
-  /** Its glyph box in each frame it's on screen. */
+  /** Its glyph box and font size in each frame it's on screen. */
   boxes: Map<number, Box>;
+  sizes: Map<number, number>;
 }
 
 /** Something that pulls the eye in a frame. */
@@ -93,7 +100,15 @@ export interface Glance {
   label: string;
   read?: Read;
   element?: Element;
+  /** Why the eye is here: something new pulled it, it went on to the next unread line, it follows
+   * motion, or it stayed where it was. */
+  why: "pulled" | "next" | "follows" | "stays";
+  /** Words of the line read by the end of this frame, and the line's words. */
+  progress?: { read: number; words: number };
 }
+
+/** A line counts as read once at most this many of its words are left. */
+export const left = (r: Read) => Math.max(0.25, (1 - VIEWER.done) * r.words);
 
 export interface Viewer {
   reads: Read[];
@@ -146,12 +161,28 @@ const textAt = (film: Film, f: number, o: ViewerOptions): Line[] => {
         (r.fs ?? 0) >= legible &&
         r.o > 0.5 &&
         // A cursor's name tag says who it is; it isn't something to read.
-        !["label", "part", "cursor"].includes(
+        !["cursor-label", "part", "cursor"].includes(
           film.elementOf(f, r.k)?.role ?? "",
         ) &&
         area(intersect(r.v, canvas)) > 0.5 * area(r.b),
     )
     .sort((a, b) => a.b[0] - b.b[0]);
+  // The painted box (a card, a bubble, a panel) each row sits in: text in different boxes is
+  // different texts, however close together they are.
+  const painted = new Set(
+    film
+      .rows(f)
+      .filter((r) => r.t === "b")
+      .map((r) => r.k),
+  );
+  const painter = (r: RawElement) => {
+    const parts = r.k.split("/");
+    for (let i = parts.length - 1; i > 0; i -= 1) {
+      const k = parts.slice(0, i).join("/");
+      if (painted.has(k)) return k;
+    }
+    return "";
+  };
   // How each row's opacity is changing: rising as it arrives, falling as it leaves.
   const before = new Map(film.rows(f - 1).map((r) => [r.k, r.o]));
   const trend = (r: RawElement) => r.o - (before.get(r.k) ?? 0);
@@ -162,6 +193,7 @@ const textAt = (film: Film, f: number, o: ViewerOptions): Line[] => {
       const b = union(l.map((x) => x.b));
       const lfs = l[0].fs!;
       return (
+        painter(l[0]) === painter(r) &&
         Math.abs(b[1] + b[3] / 2 - (r.b[1] + r.b[3] / 2)) <
           0.5 * Math.max(b[3], r.b[3]) &&
         Math.max(fs, lfs) / Math.min(fs, lfs) < 1.25 &&
@@ -196,6 +228,7 @@ const textAt = (film: Film, f: number, o: ViewerOptions): Line[] => {
       const b = union(q.map((x) => x.box));
       const size = q[0].size;
       return (
+        painter(q[0].rows[0]) === painter(l.rows[0]) &&
         Math.max(size, l.size) / Math.min(size, l.size) < 1.2 &&
         // One leaving as another arrives in its place: different texts, not one paragraph. Lines
         // that are both arriving (a caption revealed word by word) or both steady stay together.
@@ -271,11 +304,13 @@ export const viewer = (film: Film): Viewer => {
     const fresh: Read[] = [];
     // Lines whose exact text is already being read claim their reads first, so a new line can't
     // take over a caption that's still on screen because it shares a few letters with it.
+    // A number changing in place (a counter, a clock, a timer) is the same text: it isn't new to read.
     const known = new Set(
-      live.filter((r) => f - r.to <= memory).map((r) => r.text),
+      live.filter((r) => f - r.to <= memory).map((r) => shapeOf(r.text)),
     );
     for (const l of [...lines].sort(
-      (a, b) => Number(known.has(b.text)) - Number(known.has(a.text)),
+      (a, b) =>
+        Number(known.has(shapeOf(b.text))) - Number(known.has(shapeOf(a.text))),
     )) {
       const near = (r: Read) =>
         Math.abs(r.box[0] - l.box[0]) < 2 * l.size &&
@@ -284,7 +319,7 @@ export const viewer = (film: Film): Viewer => {
       // The same words anywhere (moved, re-laid out, faded across); then the same line typed on
       // or changed in a few words, in place.
       let r: Read | undefined = open
-        .filter((x) => x.text === l.text)
+        .filter((x) => shapeOf(x.text) === shapeOf(l.text))
         .sort(
           (a, b) =>
             Math.hypot(a.box[0] - l.box[0], a.box[1] - l.box[1]) -
@@ -344,6 +379,7 @@ export const viewer = (film: Film): Viewer => {
           scale: 1,
           elements: new Set(),
           boxes: new Map(),
+          sizes: new Map(),
         };
         arrivals.push(r);
         reads.push(r);
@@ -354,6 +390,7 @@ export const viewer = (film: Film): Viewer => {
       if (l.text.length > r.full.length) r.full = l.text;
       r.box = l.box;
       r.boxes.set(f, l.box);
+      r.sizes.set(f, l.size);
       r.size = l.size;
       r.to = f;
       r.base = Math.max(r.base, l.words);
@@ -409,7 +446,7 @@ export const viewer = (film: Film): Viewer => {
         read: r,
       }));
     const moved = [...(act.get(f)?.moved ?? [])].filter(
-      (el) => !["text", "headline", "label"].includes(el.role),
+      (el) => !["text", "headline", "cursor-label"].includes(el.role),
     );
     const keys = moved.map(
       (el) => el.at(f)?.raw.k ?? el.at(f - 1)?.raw.k ?? "",
@@ -433,7 +470,7 @@ export const viewer = (film: Film): Viewer => {
 
     // Where the eye goes.
     const onScreen = (r?: Read) => !!r && seen.has(r);
-    const unread = (r?: Read) => !!r && r.words - r.read > 0.25;
+    const unread = (r?: Read) => !!r && r.words - r.read > left(r);
     const engaged = target?.read
       ? onScreen(target.read) &&
         (unread(target.read) || f - target.read.asked < film.fps / 2)
@@ -442,14 +479,39 @@ export const viewer = (film: Film): Viewer => {
       : target?.element && act.get(f)?.moved.has(target.element)
         ? 1
         : 0;
-    const look = (next: typeof target, box: Box) => {
+    let why: Glance["why"] = "stays";
+    const look = (next: typeof target, box: Box, reason: Glance["why"]) => {
+      why = reason;
       const c = centre(box);
       if (Math.hypot(c.x - at.x, c.y - at.y) > fovea) busyUntil = f + saccade;
       target = next;
     };
-    // Moving whatever the eye is already on (a camera move, a window sliding over) is followed,
-    // not a new place to look.
+    // Moving whatever the eye is already on (a window sliding over) is followed, not a new place to
+    // look. So is anything that moves along with it: a camera push or a scroll carries everything
+    // on screen by the same zoom and shift, and the eye rides along.
     const held = target?.read?.box ?? target?.element?.at(f)?.visible;
+    const was = target?.read
+      ? target.read.boxes.get(f - 1)
+      : target?.element?.at(f - 1)?.visible;
+    const zoom =
+      target?.read && was && held
+        ? (target.read.sizes.get(f) ?? 1) / (target.read.sizes.get(f - 1) ?? 1)
+        : was && held
+          ? held[2] / Math.max(was[2], 1)
+          : 1;
+    const movesWith = (el: Element) => {
+      const a = el.at(f - 1)?.box;
+      const b = el.at(f)?.box;
+      if (!a || !b || !was || !held) return false;
+      const x = held[0] - zoom * was[0];
+      const y = held[1] - zoom * was[1];
+      const tolerance = 2 + 0.02 * Math.max(a[2], a[3]);
+      return (
+        Math.abs(b[0] - (zoom * a[0] + x)) < tolerance &&
+        Math.abs(b[1] - (zoom * a[1] + y)) < tolerance &&
+        Math.abs(b[2] - zoom * a[2]) < tolerance
+      );
+    };
     const strongest = pulls
       .filter(
         (p) =>
@@ -458,7 +520,7 @@ export const viewer = (film: Film): Viewer => {
             p.element &&
             !p.read &&
             p.element.at(f - 1) &&
-            contains(p.box, held)
+            (contains(p.box, held) || movesWith(p.element))
           ),
       )
       .sort(
@@ -475,6 +537,7 @@ export const viewer = (film: Film): Viewer => {
           pull: strongest.pull,
         },
         strongest.box,
+        "pulled",
       );
     else if (!engaged) {
       const next = [...seen]
@@ -483,14 +546,14 @@ export const viewer = (film: Film): Viewer => {
           (a, b) =>
             b.size - a.size || a.box[1] - b.box[1] || a.box[0] - b.box[0],
         )[0];
-      if (next) look({ read: next, pull: 2 }, next.box);
+      if (next) look({ read: next, pull: 2 }, next.box, "next");
       else {
         const mover = moved
           .map((el) => ({ el, s: el.at(f) }))
           .filter((m) => m.s)
           .sort((a, b) => area(b.s!.visible) - area(a.s!.visible))[0];
         if (mover && mover.el !== target?.element)
-          look({ element: mover.el, pull: 1 }, mover.s!.visible);
+          look({ element: mover.el, pull: 1 }, mover.s!.visible, "follows");
       }
     }
     if (target?.read && onScreen(target.read) && f >= busyUntil)
@@ -515,14 +578,111 @@ export const viewer = (film: Film): Viewer => {
     );
     gaze.set(f, {
       ...at,
-      label: target?.read
-        ? `"${target.read.text.slice(0, 28)}"`
-        : (target?.element?.label ?? "nothing"),
+      label: target?.element?.label ?? "nothing",
       read: target?.read,
       element: target?.element,
+      why,
+      progress: target?.read && {
+        read: target.read.read,
+        words: target.read.words,
+      },
     });
   }
+  // Named once every line is complete, by its fullest text.
+  for (const g of gaze.values()) if (g.read) g.label = describe(film, g.read);
   const out = { reads, gaze, onsets, asking };
   cache.set(film, out);
   return out;
 };
+
+const tags = new WeakMap<Read, string>();
+/** A line as findings and the gaze timeline name it: its tagged element (or the tagged element it's
+ * in) and its text. */
+export const describe = (film: Film, r: Read) => {
+  let tag = tags.get(r);
+  for (const el of r.elements) {
+    if (el.tagged) tag ??= el.id;
+    const k = el.at(r.from)?.raw.k ?? el.at(el.first)!.raw.k;
+    const parts = k.split("/");
+    for (let i = parts.length - 1; i > 0 && !tag; i -= 1) {
+      const owner = film.elementOf(
+        el.at(r.from) ? r.from : el.first,
+        parts.slice(0, i).join("/"),
+      );
+      if (owner?.tagged) tag = owner.id;
+    }
+  }
+  if (tag) tags.set(r, tag);
+  const text = r.full.length > 40 ? `${r.full.slice(0, 38)}…` : r.full;
+  return `${tag ? `${tag} ` : ""}"${text}"`;
+};
+
+/** A stretch of frames the simulated viewer spends on one thing. */
+export interface GazeSpan {
+  from: number;
+  to: number;
+  label: string;
+  why: Glance["why"];
+  read?: Read;
+  element?: Element;
+  /** Words of the line read at the start and end of the stretch, and its words then. */
+  progress?: { from: number; to: number; words: number };
+}
+
+/** Where the simulated viewer looks, as stretches of frames on one thing each. */
+export const gazePath = (
+  film: Film,
+  from = film.frames[0],
+  to = film.frames[film.frames.length - 1],
+): GazeSpan[] => {
+  const v = viewer(film);
+  const out: GazeSpan[] = [];
+  const progress = new Map<Read, number>();
+  for (const f of film.frames) {
+    const g = v.gaze.get(f)!;
+    const before = g.read ? (progress.get(g.read) ?? 0) : 0;
+    if (g.read) progress.set(g.read, g.progress!.read);
+    if (f < from || f > to) continue;
+    const last = out[out.length - 1];
+    if (
+      last &&
+      last.to === f - 1 &&
+      last.read === g.read &&
+      last.element === g.element &&
+      g.why === "stays"
+    ) {
+      last.to = f;
+      if (last.progress && g.progress) {
+        last.progress.to = g.progress.read;
+        last.progress.words = g.progress.words;
+      }
+      continue;
+    }
+    out.push({
+      from: f,
+      to: f,
+      label: g.label,
+      why: g.why,
+      read: g.read,
+      element: g.element,
+      progress: g.progress && {
+        from: before,
+        to: g.progress.read,
+        words: g.progress.words,
+      },
+    });
+  }
+  return out;
+};
+
+/** A gaze path as lines of text, one stretch a line, for messages. */
+export const formatPath = (film: Film, spans: GazeSpan[]) =>
+  spans.map((g) => {
+    const time = `${(g.from / film.fps).toFixed(2)}-${((g.to + 1) / film.fps).toFixed(2)}s`;
+    const words = (n: number) => n.toFixed(1).replace(/\.0$/, "");
+    return `${time.padEnd(13)} ${(g.why === "stays" ? "" : g.why).padEnd(8)} ${g.label}${
+      g.progress
+        ? `  (read ${words(g.progress.from)} → ${words(g.progress.to)} of ${words(g.progress.words)} words)`
+        : ""
+    }`;
+  });
