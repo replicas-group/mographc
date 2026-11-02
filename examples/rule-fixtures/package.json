@@ -1,5 +1,5 @@
 {
-  "name": "mographc-fixtures",
+  "name": "mographc-rule-fixtures",
   "version": "1.0.0",
   "description": "Small Remotion films that each break one mographc rule, with a fixed version of each",
   "private": true,

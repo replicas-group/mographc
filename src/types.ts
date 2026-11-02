@@ -11,7 +11,7 @@ export interface RawElement {
   b: Box;
   /** The part of it not clipped away by itself or an ancestor. */
   v: Box;
-  /** For text that paints its own background or border, its border box. */
+  /** For text that paints its own background or border, the part of its border box not clipped away. */
   pb?: Box;
   /** Effective opacity, ancestors included. */
   o: number;

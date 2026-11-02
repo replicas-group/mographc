@@ -7,11 +7,20 @@ const cases: [rule: string, broken: string[], fixed: string[]][] = [
   ["layout/tight-spacing", ["TightSpacing"], ["TightSpacingFixed"]],
   [
     "layout/text-overlap",
-    ["BriefOverlap"],
+    ["BriefOverlap", "BriefOverlapFaded"],
     ["BriefOverlapCrossfade", "BriefOverlapFixed"],
   ],
   ["staging/empty-surface", ["EmptySurface"], ["EmptySurfaceFixed"]],
-  ["staging/small-focus", ["SmallFocus"], ["SmallFocusFixed"]],
+  [
+    "staging/small-focus",
+    ["SmallFocus"],
+    [
+      "SmallFocusFixed",
+      "SmallFocusReread",
+      "SmallFocusLinger",
+      "SmallFocusLinked",
+    ],
+  ],
   ["cursor/covers-text", ["CursorOnText"], ["CursorOnTextFixed"]],
   ["layout/text-cut", ["CutText"], ["CutTextFixed"]],
 ];

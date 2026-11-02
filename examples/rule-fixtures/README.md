@@ -13,7 +13,7 @@ Small Remotion films that each show one problem a rule should report, next to a 
 
 ```bash
 npm run build                 # in the repository root, once
-cd examples/fixtures && npm install
+cd examples/rule-fixtures && npm install
 npm test                      # each rule reports its film and not the fixed one
 npx mographc lint TightSpacing  # the findings for one film
 ```

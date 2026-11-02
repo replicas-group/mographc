@@ -8,7 +8,7 @@ import { TightSpacing } from "./TightSpacing";
 
 const film = { durationInFrames: 90, fps: 30, width: 1920, height: 1080 };
 
-// Each problem has a composition that shows it and a "Fixed" one that doesn't.
+// Each problem has a composition that shows it and one or more that don't ("Fixed" and others).
 export const RemotionRoot: React.FC = () => (
   <>
     <Composition
@@ -27,6 +27,12 @@ export const RemotionRoot: React.FC = () => (
       id="BriefOverlap"
       component={BriefOverlap}
       defaultProps={{ variant: "glitch" as const }}
+      {...film}
+    />
+    <Composition
+      id="BriefOverlapFaded"
+      component={BriefOverlap}
+      defaultProps={{ variant: "faded" as const }}
       {...film}
     />
     <Composition
@@ -56,13 +62,33 @@ export const RemotionRoot: React.FC = () => (
     <Composition
       id="SmallFocus"
       component={SmallFocus}
-      defaultProps={{ fixed: false }}
+      defaultProps={{ variant: "wide" as const }}
       {...film}
     />
     <Composition
       id="SmallFocusFixed"
       component={SmallFocus}
-      defaultProps={{ fixed: true }}
+      defaultProps={{ variant: "pushed" as const }}
+      {...film}
+    />
+    <Composition
+      id="SmallFocusReread"
+      component={SmallFocus}
+      defaultProps={{ variant: "reread" as const }}
+      {...film}
+      durationInFrames={240}
+    />
+    <Composition
+      id="SmallFocusLinger"
+      component={SmallFocus}
+      defaultProps={{ variant: "linger" as const }}
+      {...film}
+      durationInFrames={120}
+    />
+    <Composition
+      id="SmallFocusLinked"
+      component={SmallFocus}
+      defaultProps={{ variant: "linked" as const }}
       {...film}
     />
     <Composition

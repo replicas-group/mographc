@@ -22,7 +22,7 @@ export const EmptySurface: React.FC<{ fixed: boolean }> = ({ fixed }) => {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: fixed ? 40 : 16,
+            gap: fixed ? 40 : 28,
             padding: 56,
           }}
         >

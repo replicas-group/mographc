@@ -4,11 +4,18 @@
  * were never still for more than about 0.9 s and had something changing about 65% of the time
  * (slow drift aside) with a large change half the time; films judged boring sat near 40%.
  */
-import { area, type Element, type Film } from "../film.ts";
+import {
+  area,
+  intersect,
+  isAncestor,
+  union,
+  type Element,
+  type Film,
+} from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
-import { viewer } from "../viewer.ts";
-import { runs, surfacesAt } from "./util.ts";
+import { viewer, VIEWER, type Read } from "../viewer.ts";
+import { px, runs, surfacesAt } from "./util.ts";
 
 /** Frames where at least `share` of the canvas changes. */
 const activeFrames = (film: Film, share: number, substantial = false) => {
@@ -181,8 +188,8 @@ export const smallFocus = defineRule({
   options: { focus: 0.05, surface: 0.25, seconds: 1.5 },
   docs: {
     summary:
-      "The simulated viewer's eye doesn't stay on one thing covering less than 5% of the canvas, inside a surface covering 25% to 95% of it, for longer than 1.5 s. When it does, the view should push in on that thing.",
-    why: "When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`): on each frame it takes what the eye is on, a line of text or another element (cursors aside), and measures its box. It reports a stretch longer than 1.5 s on the same thing while that box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas.",
+      "The simulated viewer doesn't spend longer than 1.5 s reading or following one thing covering less than 5% of the canvas inside a surface covering 25% to 95% of it. When it does, the view should push in on that thing.",
+    why: "When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`) and counts only the time the eye needs to spend on the thing: for a line of text, the frames until the viewer, reading 3.5 words a second, has read it; for another element (cursors aside), the frames in which it changes. Looking on after a line is read, a line the viewer already read in full earlier (it scrolled away and back), and text joined to another element by a connector (a line or bar from the text's box, or the card it sits in, reaching at least 150 px at 1080p away, such as a leader line to a marker) are not counted, because pushing in on those would hide what they point to or show nothing new. It reports more than 1.5 s on the same thing while its box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas.",
     fix: "Push in on the thing being looked at: scale the film's content up about it with an eased move, so it covers well over 5% of the canvas, then pull back when the eye has to move on. Cropping to the part of the surface around it works too. Don't accept this finding as a pause for reading: the pause is fine, the framing is what is wrong.",
     options: {
       focus:
@@ -190,11 +197,57 @@ export const smallFocus = defineRule({
       surface:
         "The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply.",
       seconds:
-        "The longest time, in seconds, the eye may stay on one small thing in a wide shot.",
+        "The longest time, in seconds, the eye may spend on one small thing in a wide shot.",
     },
   },
   check({ film, options, report }) {
     const v = viewer(film);
+    const act = film.activity();
+    const perFrame = VIEWER.wordsPerSecond / film.fps;
+    const near = px(film, 12);
+    const reach = px(film, 150);
+    // How far the viewer has read each line, and the lines it has read in full.
+    const progress = new Map<Read, number>();
+    const done = new Set<string>();
+    const text = (r: Read) => r.full.replace(/\s+/g, " ").trim();
+    /** A connector (an svg, or a thin bar) from the text, or the small card it's in, to somewhere else. */
+    const linked = (r: Read, f: number, box: Box) => {
+      const rows = film.rows(f);
+      const keys = [...r.elements].map((e) => e.at(f)?.raw.k ?? "");
+      const card = rows
+        .filter(
+          (x) =>
+            x.t === "b" &&
+            area(x.v) < 0.1 * film.area &&
+            keys.some((k) => isAncestor(x.k, k)),
+        )
+        .sort((a, b) => area(a.v) - area(b.v))[0];
+      // Text that paints its own card (a bubble, a tag) is anchored by that card.
+      const own = rows.find((x) => x.pb && keys.includes(x.k))?.pb;
+      const anchor = own ?? card?.v ?? box;
+      const grown: Box = [
+        anchor[0] - near,
+        anchor[1] - near,
+        anchor[2] + 2 * near,
+        anchor[3] + 2 * near,
+      ];
+      return rows.some((x) => {
+        const b = x.v;
+        if (
+          x.o < 0.3 ||
+          area(b) <= 0 ||
+          area(b) > 0.25 * film.area ||
+          (x.t !== "g" &&
+            !(x.t === "b" && Math.min(b[2], b[3]) <= px(film, 6))) ||
+          keys.some((k) => isAncestor(k, x.k) || isAncestor(x.k, k)) ||
+          (card && isAncestor(card.k, x.k)) ||
+          area(intersect(b, grown)) <= 0
+        )
+          return false;
+        const u = union([anchor, b]);
+        return u[2] - anchor[2] >= reach || u[3] - anchor[3] >= reach;
+      });
+    };
     const spans: {
       key: string;
       element?: Element;
@@ -203,17 +256,25 @@ export const smallFocus = defineRule({
     }[] = [];
     for (const f of film.frames) {
       const g = v.gaze.get(f);
-      const box = g?.read
-        ? g.read.boxes.get(f)
-        : g?.element && !["cursor", "part", "label"].includes(g.element.role)
-          ? g.element.at(f)?.visible
-          : undefined;
-      if (
-        !g ||
-        !box ||
-        area(box) <= 0 ||
-        area(box) >= options.focus * film.area
+      if (!g) continue;
+      let box: Box | undefined;
+      if (g.read) {
+        const r = g.read;
+        const read = progress.get(r) ?? 0;
+        // Already read: looking on, or reading it again when it comes back, shows nothing new.
+        if (read >= r.words - 0.25 || (read === 0 && done.has(text(r))))
+          continue;
+        progress.set(r, read + perFrame);
+        if (read + perFrame >= r.words - 0.25) done.add(text(r));
+        box = r.boxes.get(f);
+        if (box && linked(r, f, box)) continue;
+      } else if (
+        g.element &&
+        !["cursor", "part", "label"].includes(g.element.role) &&
+        act.get(f)?.moved.has(g.element)
       )
+        box = g.element.at(f)?.visible;
+      if (!box || area(box) <= 0 || area(box) >= options.focus * film.area)
         continue;
       const c = [box[0] + box[2] / 2, box[1] + box[3] / 2];
       const wide = surfacesAt(film, f, options.surface, 0.95).some(
@@ -252,7 +313,7 @@ export const smallFocus = defineRule({
         element,
         frames: [a, b],
         measured: `holds the simulated viewer's eye for ${seconds.toFixed(1)} s while covering only ${((area(r) / film.area) * 100).toFixed(1)}% of the canvas (${r[2].toFixed(0)}x${r[3].toFixed(0)} px at (${r[0].toFixed(0)}, ${r[1].toFixed(0)})), inside a large surface`,
-        need: `a view pushed in or cropped so what the eye stays on for more than ${options.seconds} s covers at least ${(options.focus * 100).toFixed(0)}% of the canvas`,
+        need: `a view pushed in or cropped so what the eye spends more than ${options.seconds} s on covers at least ${(options.focus * 100).toFixed(0)}% of the canvas`,
       });
     }
   },

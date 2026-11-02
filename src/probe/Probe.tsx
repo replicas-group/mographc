@@ -202,11 +202,12 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
       if (fonts.has(family) && !fonts.get(family)) row.fb = family;
     }
     if (paints && !text) row.bg = style.backgroundColor;
-    // Text that paints its own background or border (a bubble, a button) is also a box.
+    // Text that paints its own background or border (a bubble, a button) is also a box: the part
+    // of that box its containers don't clip.
     if (paints && text && el.tagName !== "svg")
-      row.pb = local([rect.left, rect.top, rect.width, rect.height]).map(
-        r1,
-      ) as Box;
+      row.pb = local(
+        intersect(box, [rect.left, rect.top, rect.width, rect.height]),
+      ).map(r1) as Box;
     if (el.tagName === "svg") {
       row.fill = el.querySelector("path")?.getAttribute("fill") ?? "";
       // The colour it actually paints, with currentColor resolved.

@@ -128,10 +128,26 @@ export class Element {
     return this.samples.get(frame);
   }
   /** What it's called in a finding: its tag, or its text, or its kind and place. */
+  private named?: string;
   get label() {
     if (this.tagged) return this.id;
+    return (this.named ??= this.name());
+  }
+  private name() {
+    const quote = (x: string) =>
+      `"${x.length > 32 ? `${x.slice(0, 30)}…` : x}"`;
+    // Its fullest text, so a line typed on is named by what it says, not its first letters.
+    const text = this.frames
+      .map((f) => this.at(f)!.raw.x ?? "")
+      .reduce((a, b) => (b.length > a.length ? b : a), "");
+    if (text) return `${this.role} ${quote(text)}`;
+    // A box is named by the first words inside it, when it has any.
     const s = this.samples.get(this.first)!;
-    if (s.raw.x) return `${this.role} "${s.raw.x.slice(0, 28)}"`;
+    for (const f of this.frames) {
+      const inside = this.contents(f).filter((r) => r.x && r.o > 0.5);
+      if (inside.length)
+        return `${this.role} with ${quote(readText(inside.slice(0, 6)))}`;
+    }
     const b = s.box;
     return `${this.role} ${Math.round(b[2])}x${Math.round(b[3])} at (${Math.round(b[0])}, ${Math.round(b[1])})`;
   }

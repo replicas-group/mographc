@@ -258,8 +258,8 @@ export const textOverlap = defineRule({
   options: {},
   docs: {
     summary:
-      "Two different texts never overlap by 30% or more of the smaller one's area, unless an opaque background behind the upper text covers the overlap: not for a single frame while both are at 90% opacity or more, and not for 0.1 s or longer (and at least 3 frames) while both are above 20%.",
-    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Two texts drawn at full strength on top of each other are a visible glitch even for one frame, which is what a cut that is off by a frame looks like; a crossfade, where both are partly transparent, is only reported when it lasts 0.1 s and at least 3 frames. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.",
+      "Two different texts never overlap by 30% or more of the smaller one's area, unless an opaque background behind the upper text covers the overlap: not for a single frame while both are at 50% opacity or more, and not for 0.1 s or longer (and at least 3 frames) while both are above 20%.",
+    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Two texts that are both at least half visible on top of each other are a glitch even for one frame, which is what a cut that is off by a frame looks like. A crossfade, where at least one of the two is below 50% opacity in every overlapping frame, is only reported when it lasts 0.1 s and at least 3 frames. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.",
     fix: "Let the old text leave before the new one appears (check that the frame ranges of the two don't share a frame), move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.",
   },
   check({ film, report }) {
@@ -267,7 +267,7 @@ export const textOverlap = defineRule({
       string,
       {
         frames: number[];
-        /** Frames in which both texts are at 90% opacity or more. */
+        /** Frames in which both texts are at 50% opacity or more. */
         solid: Set<number>;
         key: string;
         a: string;
@@ -352,7 +352,7 @@ export const textOverlap = defineRule({
             b,
           };
           if (h.frames[h.frames.length - 1] !== f) h.frames.push(f);
-          if (lower.r.o >= 0.9 && upper.r.o >= 0.9) h.solid.add(f);
+          if (lower.r.o >= 0.5 && upper.r.o >= 0.5) h.solid.add(f);
           hits.set(id, h);
         }
     }
@@ -363,8 +363,8 @@ export const textOverlap = defineRule({
         report({
           element: film.elementOf(a, h.key),
           frames: [a, b],
-          measured: `"${h.a.slice(0, 30)}" and "${h.b.slice(0, 30)}" are drawn on top of each other, overlapping by at least 30% of the smaller one's area, for ${b - a + 1} frame(s) (${((b - a + 1) / film.fps).toFixed(2)} s)${solid ? `, ${solid} of them with both at 90% opacity or more` : ""}`,
-          need: "only one text at a time in any spot: no two different texts overlap by 30% or more of the smaller one's area in any frame where both are at 90% opacity or more, or for 0.1 s or longer at any opacity above 20%",
+          measured: `"${h.a.slice(0, 30)}" and "${h.b.slice(0, 30)}" are drawn on top of each other, overlapping by at least 30% of the smaller one's area, for ${b - a + 1} frame(s) (${((b - a + 1) / film.fps).toFixed(2)} s)${solid ? `, ${solid} of them with both at 50% opacity or more` : ""}`,
+          need: "only one text at a time in any spot: no two different texts overlap by 30% or more of the smaller one's area in any frame where both are at 50% opacity or more, or for 0.1 s or longer at any opacity above 20%",
         });
       }
   },

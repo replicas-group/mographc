@@ -42,9 +42,9 @@ Text that stays still for 0.5 s or longer is not cut off by its own box, a conta
 
 Compiler rule, always on.
 
-Two different texts never overlap by 30% or more of the smaller one's area, unless an opaque background behind the upper text covers the overlap: not for a single frame while both are at 90% opacity or more, and not for 0.1 s or longer (and at least 3 frames) while both are above 20%.
+Two different texts never overlap by 30% or more of the smaller one's area, unless an opaque background behind the upper text covers the overlap: not for a single frame while both are at 50% opacity or more, and not for 0.1 s or longer (and at least 3 frames) while both are above 20%.
 
-**Why:** Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Two texts drawn at full strength on top of each other are a visible glitch even for one frame, which is what a cut that is off by a frame looks like; a crossfade, where both are partly transparent, is only reported when it lasts 0.1 s and at least 3 frames. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.
+**Why:** Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often when one message replaces another: the old one fades out in the same place the new one fades in, a line slides under another, or labels are stacked on each other. Two texts that are both at least half visible on top of each other are a glitch even for one frame, which is what a cut that is off by a frame looks like. A crossfade, where at least one of the two is below 50% opacity in every overlapping frame, is only reported when it lasts 0.1 s and at least 3 frames. Words or letters set as separate pieces side by side on one line count as one text, and identical texts or texts nested inside each other are not compared.
 
 **Fix:** Let the old text leave before the new one appears (check that the frame ranges of the two don't share a frame), move one out of the other's way (for example, push the old line up and off), or put the new text on an opaque background that covers the old one.
 
@@ -79,16 +79,16 @@ Text that isn't inside a surface (a window, card or panel), such as a caption or
 
 Default: warn.
 
-Text standing still is at least 0.4 times its font size away from the text above or below it, and from a box (a panel, bubble, code block or button) beside, above or below it; with two texts, the smaller font size counts. Gaps held for less than 0.5 s are ignored.
+Text standing still is at least 0.5 times its font size away from the text above or below it, and from a box (a panel, bubble, code block or button) beside, above or below it; with two texts, the larger font size counts. Gaps held for less than 0.5 s are ignored.
 
-**Why:** Text squeezed against the next line or the next box reads as one crowded block, and on a small screen the two run together. `staging/no-padding` only measures text against the edges of the box it is inside; this rule measures the gap between neighbours: a heading and the panel under it, a chat bubble and the command line under it, a caption and the line after it. Lines of the same font size and family stacked within 0.6 times their font size are one paragraph and aren't compared with each other, and pieces of text side by side on one line are one line. A box counts when it is at least 2 font sizes wide and 1.5 font sizes tall (for a box beside the text rather than above or below it, at least 3 font sizes tall, so an icon or a tag next to a word is left alone), and isn't the box the text is inside. The rule checks text at least 10 px tall at 1080p above 50% opacity, in frames where both the text and its neighbour moved less than 1 px since the previous frame, and measures the gap between the text's glyphs and the neighbour's box.
+**Why:** Text squeezed against the next line or the next box reads as one crowded block, and on a small screen the two run together. `staging/no-padding` only measures text against the edges of the box it is inside; this rule measures the gap between neighbours: a heading and the panel under it, a chat bubble and the command line under it, a caption and the line after it. The threshold comes from line spacing: inside a paragraph set at a line height of 1.2 to 1.5, the gap between one line's letters and the next is at most about 0.4 times the font size, so two separate blocks closer than 0.5 times the font size read as lines of one paragraph rather than as two things. The larger font size counts because a heading's spacing is judged at its own size. Lines of the same font size and family stacked within 0.6 times their font size are one paragraph and aren't compared with each other, and pieces of text side by side on one line are one line. Text that paints its own background or border (a chat bubble, a button) is measured by that painted box, and text clipped by a container by its visible part. A box counts when it is at least 2 font sizes wide and 1.5 font sizes tall (for a box beside the text rather than above or below it, at least 3 font sizes tall, so an icon or a tag next to a word is left alone), and isn't the box the text is inside. The rule checks text at least 10 px tall at 1080p above 50% opacity, in frames where both the text and its neighbour moved less than 1 px since the previous frame.
 
 **Fix:** Add space between the two: a margin or gap of at least the required size (the finding gives it in px), or move one of them. If the two belong together, set them as one paragraph in the same font size, or put the text inside the box with padding.
 
-| Option    | Default | What it controls                                                                            |
-| --------- | ------- | ------------------------------------------------------------------------------------------- |
-| `ratio`   | `0.4`   | The smallest gap allowed, as a multiple of the font size (with two texts, the smaller one). |
-| `seconds` | `0.5`   | The shortest time, in seconds, a gap must stay too small to be reported.                    |
+| Option    | Default | What it controls                                                                           |
+| --------- | ------- | ------------------------------------------------------------------------------------------ |
+| `ratio`   | `0.5`   | The smallest gap allowed, as a multiple of the font size (with two texts, the larger one). |
+| `seconds` | `0.5`   | The shortest time, in seconds, a gap must stay too small to be reported.                   |
 
 ## assets
 
@@ -362,9 +362,9 @@ While a surface covering 25% to 95% of the canvas is visible, the substantial ch
 
 Default: warn.
 
-The simulated viewer's eye doesn't stay on one thing covering less than 5% of the canvas, inside a surface covering 25% to 95% of it, for longer than 1.5 s. When it does, the view should push in on that thing.
+The simulated viewer doesn't spend longer than 1.5 s reading or following one thing covering less than 5% of the canvas inside a surface covering 25% to 95% of it. When it does, the view should push in on that thing.
 
-**Why:** When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`): on each frame it takes what the eye is on, a line of text or another element (cursors aside), and measures its box. It reports a stretch longer than 1.5 s on the same thing while that box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas.
+**Why:** When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`) and counts only the time the eye needs to spend on the thing: for a line of text, the frames until the viewer, reading 3.5 words a second, has read it; for another element (cursors aside), the frames in which it changes. Looking on after a line is read, a line the viewer already read in full earlier (it scrolled away and back), and text joined to another element by a connector (a line or bar from the text's box, or the card it sits in, reaching at least 150 px at 1080p away, such as a leader line to a marker) are not counted, because pushing in on those would hide what they point to or show nothing new. It reports more than 1.5 s on the same thing while its box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas.
 
 **Fix:** Push in on the thing being looked at: scale the film's content up about it with an eased move, so it covers well over 5% of the canvas, then pull back when the eye has to move on. Cropping to the part of the surface around it works too. Don't accept this finding as a pause for reading: the pause is fine, the framing is what is wrong.
 
@@ -372,7 +372,7 @@ The simulated viewer's eye doesn't stay on one thing covering less than 5% of th
 | --------- | ------- | ------------------------------------------------------------------------------------------------------- |
 | `focus`   | `0.05`  | The largest share of the canvas (0.05 is 5%) the thing being looked at may cover for the rule to apply. |
 | `surface` | `0.25`  | The smallest share of the canvas (0.25 is 25%) a visible surface must cover for the rule to apply.      |
-| `seconds` | `1.5`   | The longest time, in seconds, the eye may stay on one small thing in a wide shot.                       |
+| `seconds` | `1.5`   | The longest time, in seconds, the eye may spend on one small thing in a wide shot.                      |
 
 ### `staging/title-off-centre`
 
