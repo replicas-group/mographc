@@ -2,24 +2,37 @@
 
 mographc is a compiler, linter and test framework for motion graphics made with [Remotion](https://remotion.dev).
 
-Motion graphics written in code can be checked the same way other code is checked. mographc renders every frame of a Remotion film, measures every element on every frame (its position, size, opacity, stretch and text), and then runs three kinds of checks on those measurements:
+mographc renders every frame of a Remotion film and measures every element on every frame: its position, size, opacity, stretch and text. Because a Remotion film is code that renders to the DOM, these measurements are exact, and mographc can check a film in the same three ways that code is usually checked:
 
 - `mographc check` works like `tsc`. It reports what is broken: elements that teleport, flicker, text that is cut off or drawn over other text, images that fail to load, fonts that fall back.
 - `mographc lint` works like ESLint. It checks the film against rules about good motion, such as easing, pacing, staging and legibility. It has a flat config file, presets, plugins, per-rule options and ignores written next to the code.
 - `mographc test` works like Vitest. You write down what the film is meant to do, for example "the cursor clicks _Send_ at 4.2 s", and mographc checks it.
 
-We built it for AI agents that make videos, so each finding says what was measured, what the rule needs, and how to fix it. People can read the same output.
+Each finding reports what was measured, what the rule requires and how to fix it. That way a coding agent making a video can fix problems itself, without a person watching the film and describing what's wrong.
 
-Here is the output for the broken version of the [demo film](examples/demo) in this repository:
+This is the output for the broken version of the [demo film](examples/demo) in this repository, which has three bugs in it:
+
+![Terminal output of npx mographc verify DemoBroken: two lint errors, continuity/jump and cursor/dead-exit, each with what was measured and how to fix it, then the film's tests with four failing and two passing](docs/verify-output.svg)
+
+<details>
+<summary>The same output as text</summary>
+
+<!-- verify-output:start -->
 
 ```
 $ npx mographc verify DemoBroken
 
 DemoBroken
-  2.80s          error  continuity/jump              cursor:person: moves 295 px in one frame (the frames around it: 54 px)
-                        needs one continuous path. Fix: Find the frame in the finding and make the motion before and after it start and end at the same point.
-  3.83-4.13s     error  cursor/dead-exit             cursor:person: it disappears on screen, at 0 px/s
-                        needs leave by moving off the canvas. Fix: After its last action, fling the cursor off the nearest edge (a short, fast, eased-in move) instead of fading it.
+  2.80s          error  continuity/jump              cursor:person: moves 295 px in one frame (the
+                        frames around it: 54 px)
+                        needs one continuous path. Fix: Find the frame in the finding and make the
+                        motion before and after it start and end at the same point. If one element
+                        hands off to another, start the second exactly where the first ends.
+  3.83-4.13s     error  cursor/dead-exit             cursor:person: it disappears on screen, at 0
+                        px/s
+                        needs leave by moving off the canvas. Fix: After its last action, fling the
+                        cursor off the nearest edge (a short, fast, eased-in move) instead of fading
+                        it.
 
 2 errors, 0 warnings
 
@@ -27,10 +40,38 @@ DemoBroken
 
 src/demo.mographc.ts
   ✗ the click > the cursor clicks Send
-      expected cursor:person to point at button:send at 3.33 s; its tip is at (1224, 540), the target spans x 1526-1645, y 513-570
+      expected cursor:person to point at button:send at 3.33 s; its tip is at (1224, 540), the
+      target spans x 1526-1645, y 513-570
+  ✗ the click > it moves without jumping
+      expected cursor:person to move continuously, but it jumps 295 px at 2.83 s
+  ✗ the click > then leaves by moving off the canvas
+      expected cursor:person to leave the canvas by 4.27 s, but it disappears on screen at (1255,
+      574)
   ✓ the layout > the headline never touches the window (0 ms)
-  …
+  ✓ the layout > the chat reads on a phone (0 ms)
+  ✗ the film passes the linter
+
+      DemoBroken
+        2.80s          error  continuity/jump              cursor:person: moves 295 px in one frame
+                              (the frames around it: 54 px)
+                              needs one continuous path. Fix: Find the frame in the finding and make
+                              the motion before and after it start and end at the same point. If one
+                              element hands off to another, start the second exactly where the first
+                              ends.
+        3.83-4.13s     error  cursor/dead-exit             cursor:person: it disappears on screen,
+                              at 0 px/s
+                              needs leave by moving off the canvas. Fix: After its last action,
+                              fling the cursor off the nearest edge (a short, fast, eased-in move)
+                              instead of fading it.
+
+      2 errors, 0 warnings
+
+2 passed, 4 failed
 ```
+
+<!-- verify-output:end -->
+
+</details>
 
 ## Getting started
 
@@ -44,7 +85,7 @@ npx mographc verify    # runs the compiler, the linter and the tests; exits 1 on
 
 mographc needs Node 22.13 or later. Bun users can run it with `bunx mographc`.
 
-No other setup is needed. mographc bundles the project with its own `remotion.config.ts` (so Tailwind and custom webpack settings still apply), wraps every composition in a probe, and steps through every frame without taking screenshots. The result is cached until the project's sources change.
+You don't need any other setup, because mographc bundles the project with its own `remotion.config.ts` (so Tailwind and custom webpack settings still apply), wraps every composition in a probe, and steps through every frame without taking screenshots. The result is cached until the project's sources change.
 
 mographc uses the project's own copy of Remotion rather than bringing its own, so there is only one version of Remotion in the project and it always matches.
 
@@ -74,7 +115,7 @@ Findings and tests are much easier to read when the film's subjects have names:
 
 ## Configuring the linter
 
-`mographc.config.ts` is a flat config, in the same style as ESLint's. It is an array of blocks applied in order, and a preset is just a block:
+`mographc.config.ts` is a flat config, in the same style as ESLint's. It is an array of blocks applied in order. A preset is an ordinary block, so later blocks can override any of its settings:
 
 ```ts
 import { defineConfig, recommended } from "mographc";

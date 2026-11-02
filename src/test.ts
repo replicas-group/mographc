@@ -21,7 +21,7 @@ import {
   type Sample,
 } from "./film.ts";
 import { failing, run } from "./lint.ts";
-import { format } from "./report.ts";
+import { format, width } from "./report.ts";
 import { expect, type Matcher } from "./runner.ts";
 import { needOut } from "./rules/util.ts";
 import type { Box } from "./types.ts";
@@ -363,7 +363,8 @@ const matchers = {
     return result(
       !errors.length,
       "expected lint errors",
-      format(errors, { warnings: false }),
+      // Printed indented under the test name, so it wraps 6 columns sooner.
+      format(errors, { warnings: false, columns: width && width - 6 }),
     );
   },
 };

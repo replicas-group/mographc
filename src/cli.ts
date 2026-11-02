@@ -16,7 +16,7 @@ import { capture, findProject } from "./capture.ts";
 import { allRules, loadConfig } from "./config.ts";
 import { Film } from "./film.ts";
 import { failing, run } from "./lint.ts";
-import { format } from "./report.ts";
+import { bold, format } from "./report.ts";
 import { runFiles } from "./runner.ts";
 import type { Finding } from "./rule.ts";
 import type { RawFilm } from "./types.ts";
@@ -69,7 +69,10 @@ const positional = args.filter(
 const command = positional[0] ?? "help";
 const json = flag("json") === "true";
 const log = (m: string) => {
-  if (!json) process.stderr.write(`\x1b[2m${m}\x1b[0m\n`);
+  if (json) return;
+  const { NO_COLOR, FORCE_COLOR } = process.env;
+  const colour = !NO_COLOR && (!!FORCE_COLOR || process.stderr.isTTY);
+  process.stderr.write(colour ? `\x1b[2m${m}\x1b[0m\n` : `${m}\n`);
 };
 
 const baselinePath = (root: string, composition: string) =>
@@ -160,7 +163,7 @@ const main = async (): Promise<number> => {
       const { findings, project } = await lintAll(["check", "lint"]);
       const lintCode = output(findings);
       if (json) return lintCode;
-      console.log("\n— tests (*.mographc.ts)");
+      console.log(`\n${bold("— tests (*.mographc.ts)")}`);
       const testCode = await runTests(project.root);
       return lintCode || testCode ? 1 : 0;
     }

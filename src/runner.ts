@@ -6,7 +6,7 @@
 import path from "node:path";
 import { isDeepStrictEqual, inspect } from "node:util";
 import { load } from "./load.ts";
-import { bold, dim, green, red } from "./report.ts";
+import { bold, dim, green, red, wrap } from "./report.ts";
 
 type Fn = () => unknown;
 interface Case {
@@ -230,19 +230,25 @@ export const runFiles = async (files: string[], root: string) => {
     }
   }
   console.log(
-    `\n${passed} passed, ${failed ? red(`${failed} failed`) : "0 failed"}${skipped ? `, ${skipped} skipped` : ""}`,
+    `\n${passed ? green(`${passed} passed`) : "0 passed"}, ${failed ? bold(red(`${failed} failed`)) : "0 failed"}${skipped ? `, ${skipped} skipped` : ""}`,
   );
   return failed ? 1 : 0;
 };
 
-const indent = (error: unknown) =>
+const indent = (error: unknown) => {
   // Matched by name: the error may come from the test file's copy of this module.
-  (error instanceof Error && error.name === "AssertionError"
+  const assertion = error instanceof Error && error.name === "AssertionError";
+  const text = assertion
     ? error.message
     : error instanceof Error
       ? (error.stack ?? error.message)
-      : String(error)
-  )
+      : String(error);
+  return text
     .split("\n")
-    .map((l) => `      ${l}`)
+    .flatMap((l) =>
+      // Wrap the matcher's sentences; indented lines are formatted findings, wrapped already.
+      assertion && !/^\s/.test(l) && !l.includes("\x1b") ? wrap(l, 6) : [l],
+    )
+    .map((l) => (l ? `      ${l}` : l))
     .join("\n");
+};
