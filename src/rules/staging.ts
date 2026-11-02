@@ -21,7 +21,7 @@ export const titleOffCentre = defineRule({
   docs: {
     summary:
       "A card with only type on it (an opening word, a title, an end lockup) is centred on the canvas.",
-    why: "With nothing else in frame, the eye measures the type against the frame's edges; a few dozen pixels off reads as a mistake.",
+    why: "With nothing else in the frame, viewers judge the type's position against the frame's edges, so being a few dozen pixels off looks like a mistake.",
     fix: "Centre the group's measured glyphs, not its box: an icon, a gap or letter spacing shifts the visual centre. The finding gives the offset to correct.",
   },
   check({ film, options, report }) {
@@ -86,7 +86,7 @@ export const noPadding = defineRule({
   docs: {
     summary:
       "Text sits inside its window with padding, never crammed against or cut by the edge.",
-    why: "A window whose content touches its edges looks broken, even if the product does that at its own scale. Judged on held frames only: a page scrolling past an edge is motion, not framing.",
+    why: "A window whose content touches its edges looks broken, even if the product does that at its own scale. The rule only checks frames where the window is held still, because a page scrolling past an edge is motion rather than framing.",
     fix: "Add padding between the window's edge and its content, or frame the window so the content sits inside it (pan, or zoom slightly less).",
   },
   check({ film, options, report }) {
@@ -162,8 +162,8 @@ export const textTooSmall = defineRule({
   options: { minSize: 14, briefSeconds: 1.5 },
   docs: {
     summary:
-      "A product surface held on screen reads on a phone: its body text is at least ~14 px at 1080p.",
-    why: "Launch videos are watched on phones. A whole page shrunk to fit the frame shows that a page exists, but nobody can read it. One brief full view to show scale is fine.",
+      "A product surface held on screen can be read on a phone, which means its body text is at least about 14 px at 1080p.",
+    why: "Product videos are often watched on phones. A whole page shrunk to fit the frame shows that the page exists, but its text can't be read. One brief full view to show scale is fine.",
     fix: "Zoom in to the part that matters and move through it in place (pan or scroll toward a destination) instead of shrinking the whole surface to fit.",
   },
   check({ film, options, report }) {
@@ -228,8 +228,8 @@ export const textOverProduct = defineRule({
   options: { seconds: 0.2 },
   docs: {
     summary:
-      "Headline type never collides with product: no letters partly over a window or card.",
-    why: "Type cutting across UI reads as a layout mistake, and neither the words nor the product read.",
+      "Headline type never overlaps the product: no letter sits partly over a window or card.",
+    why: "Type that cuts across the interface looks like a layout mistake, and makes both the words and the product harder to read.",
     fix: "Give the headline its own region of the frame, or clear the product before the type arrives (or the type before the product). A box drawn by the headline's own component is fine.",
   },
   check({ film, options, report }) {
@@ -292,7 +292,7 @@ export const doubleExposure = defineRule({
   docs: {
     summary:
       "In a handoff, the outgoing surface is mostly gone before the incoming one is solid.",
-    why: "Two large surfaces both clearly visible while one fades over the other is a double exposure: the eye has two subjects and reads neither.",
+    why: "When two large surfaces are both clearly visible while one fades over the other, the viewer has two subjects at once and takes in neither.",
     fix: "Fade or move the outgoing surface out faster, or start the incoming one later; or transform one surface into the next instead of crossfading.",
   },
   check({ film, report }) {
@@ -346,7 +346,7 @@ export const topBanner = defineRule({
   docs: {
     summary:
       "Headlines are part of the composition, not a subtitle strip across the top.",
-    why: "A one-line banner across the top while the product fills the frame below reads as a caption bolted on, outside the shot.",
+    why: "A one-line banner across the top, with the product filling the frame below, looks like a caption added afterwards rather than part of the shot.",
     fix: "Give the headline its own region beside or around the subject, sized to read at a glance.",
   },
   check({ film, report }) {
@@ -368,7 +368,7 @@ export const textHold = defineRule({
   docs: {
     summary:
       "A headline stays fully readable long enough to read: about 3.5 words a second, at least half a second.",
-    why: "Motion isn't reading time. A line that leaves as soon as it lands is seen, not read.",
+    why: "The time a line spends animating in doesn't count as reading time. A line that leaves as soon as it has fully appeared is noticed but not read.",
     fix: "Hold the line longer once it's fully shown, or cut words.",
   },
   check({ film, options, report }) {
@@ -415,8 +415,8 @@ export const fadeOnly = defineRule({
   options: {},
   docs: {
     summary:
-      "A surface that arrives or leaves moves, scales or builds; opacity alone isn't an animation.",
-    why: "A large surface that only fades, standing still, reads as unconsidered next to everything that moves.",
+      "A surface that arrives or leaves also moves, scales or builds, rather than only fading.",
+    why: "A large surface that only fades in or out while standing still looks unfinished next to the elements that move.",
     fix: "Give the entrance or exit a small move or scale on the same curve as the fade, or build its contents in.",
   },
   check({ film, report }) {
@@ -500,7 +500,7 @@ export const popIn = defineRule({
   docs: {
     summary:
       "Content doesn't appear in a single frame on a container that's standing still.",
-    why: "Something that pops in at full opacity reads as a cut, not as the product responding.",
+    why: "Something that appears at full opacity in one frame looks like a cut rather than the product responding.",
     fix: "Fade, scale or slide it in over a few frames, or build it with its container.",
   },
   check({ film, report }) {
@@ -531,7 +531,7 @@ export const popOut = defineRule({
   docs: {
     summary:
       "Content doesn't vanish in a single frame from a container that's standing still.",
-    why: "Something that disappears at full opacity, with nothing moving, reads as a glitch: the viewer's eye was on it and it's simply gone.",
+    why: "Something that disappears at full opacity while nothing moves looks like a glitch, because the viewer may have been looking at it and it's suddenly gone.",
     fix: "Fade, scale or slide it out over a few frames, or let it leave with its container (the window moving off, a cut to the next shot).",
   },
   check({ film, options, report }) {

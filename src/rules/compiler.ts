@@ -13,8 +13,8 @@ export const jump = defineRule({
   options: {},
   docs: {
     summary:
-      "Nothing teleports: no element moves or resizes far more in one frame than in the frames around it.",
-    why: "A jump reads as a glitch. It's almost always two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component swapped for another at a new position.",
+      "No element moves or resizes far more in one frame than in the frames around it.",
+    why: "A viewer sees a sudden jump as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component swapped for another at a new position.",
     fix: "Find the frame in the finding and make the motion before and after it start and end at the same point. If one element hands off to another, start the second exactly where the first ends.",
   },
   check({ film, report }) {
@@ -76,7 +76,7 @@ export const flicker = defineRule({
   options: {},
   docs: {
     summary: "Nothing appears for only a frame or two.",
-    why: "An element on screen for a frame or two is a flash: too short to read, long enough to notice as a glitch.",
+    why: "An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch.",
     fix: "Check the conditions that mount the element at that time. Usually a range boundary is off by one, or an exit and an entrance overlap by a frame.",
   },
   check({ film, report }) {
@@ -112,7 +112,7 @@ export const textCut = defineRule({
   docs: {
     summary:
       "Text that's held still is never cut off by its own box, a parent's clip or the canvas edge.",
-    why: "Clipped words look like a layout bug, and on a phone they're unreadable.",
+    why: "Words that are cut off look like a layout bug, and on a phone they can't be read at all.",
     fix: "Give the container room for its text (wider, taller, or smaller type), move the text inside the visible area, or pan so the text is whole before you hold on it.",
   },
   check({ film, report }) {
@@ -174,7 +174,7 @@ export const fallbackFont = defineRule({
   options: {},
   docs: {
     summary: "Text renders in the font it asks for, never a fallback.",
-    why: "A fallback font changes every line's width and the look of the brand, and layout tuned to the real font breaks.",
+    why: "A fallback font changes the width of every line and the look of the brand, so a layout tuned to the real font breaks.",
     fix: "Load the font before rendering: `@remotion/google-fonts` `loadFont()`, or a `FontFace` with `delayRender` until it has loaded.",
   },
   check({ film, report }) {
@@ -200,7 +200,7 @@ export const offCanvas = defineRule({
   docs: {
     summary:
       "A tagged subject is on the canvas at some point while it's shown.",
-    why: "A subject that's never on screen is invisible: the shot shows nothing where something was meant to be. (Waiting off screen before an entrance, or after an exit, is fine.)",
+    why: "If a tagged subject is never on screen, the shot shows nothing where something was meant to be. Waiting off screen before an entrance or after an exit is fine.",
     fix: "Check the subject's position; a coordinate is probably in the wrong space (canvas vs. a scaled parent), or its entrance never runs.",
   },
   check({ film, report }) {
@@ -238,8 +238,8 @@ export const textOverlap = defineRule({
   options: {},
   docs: {
     summary:
-      "Two different texts are never drawn on top of each other: no crossfade in place, no line sliding under another, no stacked labels.",
-    why: "Overlapping words are unreadable however briefly they overlap, and read as a glitch. It happens most in handoffs: an outgoing message fading out where the incoming one fades in.",
+      "Two different texts are never drawn on top of each other, whether by a crossfade in the same place, a line sliding under another, or labels stacked on each other.",
+    why: "Overlapping words can't be read, even if they overlap only briefly, and the overlap looks like a glitch. It happens most often in handoffs, when an outgoing message fades out in the same place the incoming one fades in.",
     fix: "Let the outgoing text leave before the incoming one lands, move one out of the other's way (push the old line up and out), or put the incoming text on an opaque surface that covers the old one.",
   },
   check({ film, report }) {

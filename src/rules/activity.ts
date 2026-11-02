@@ -26,7 +26,7 @@ export const activity = defineRule({
   docs: {
     summary:
       "Something meaningful is moving most of the time, so the film never plays like a slideshow.",
-    why: "Viewers scroll past stillness. The films that hold attention keep something alive almost every moment: a build, the next element arriving, a camera move that goes somewhere. Measured as the share of time at least 1% of the frame is changing, not counting slow drift (`camera/creep`).",
+    why: "When nothing moves, viewers tend to stop watching. Films that hold attention have something changing almost all the time: a build, the next element arriving, or a camera move toward a subject. The rule measures the share of time at least 1% of the frame is changing, not counting slow drift (`camera/creep`).",
     fix: "Break long shots into back-to-back sections (three things to show are three beats, not one frame), build elements in rather than showing them complete, and bring the next element in while text is read. A slow zoom or drift does not count.",
   },
   check({ film, options, report }) {
@@ -48,8 +48,8 @@ export const deadAir = defineRule({
   options: { share: 0.01, warnAfter: 1.0, errorAfter: 2.0, endHold: 2.5 },
   docs: {
     summary:
-      "The film never sits still for long: no more than about a second where nothing meaningful moves.",
-    why: "A frozen frame reads as the video stalling. A slow zoom or drift doesn't fix it: it isn't counted as movement. The final brand hold may sit still.",
+      "There is never more than about a second where nothing meaningful moves.",
+    why: "A frame that stays frozen looks like the video has stalled. A slow zoom or drift isn't counted as movement, because it doesn't show the viewer anything new. The final hold on a logo or end card may be still.",
     fix: "Keep the shot alive with content (a build, a detail revealed, the next element arriving), make a deliberate eased camera move to the next subject, or cut to the next section sooner.",
   },
   check({ film, options, report }) {
@@ -79,8 +79,8 @@ export const longShot = defineRule({
   options: { bigChange: 0.08, seconds: 3.5 },
   docs: {
     summary:
-      "The composition changes often: a shot is held for a few seconds at most before the frame moves on.",
-    why: "One frame that shows three things in turn is a slideshow. Three back-to-back sections that each show one thing keep the film moving and make each idea land.",
+      "A shot is held for a few seconds at most before the composition changes.",
+    why: "When one frame shows three things in turn, the film feels like a slideshow. Three short sections that each show one thing keep the film moving and give each idea its own moment.",
     fix: "Split the shot: give each thing it shows its own section, or move the camera (push in on what changes, pan to the next element) instead of changing details inside a still frame.",
   },
   check({ film, options, report }) {
@@ -105,7 +105,7 @@ export const smallAction = defineRule({
   options: { region: 0.06, surface: 0.25, seconds: 0.8 },
   docs: {
     summary:
-      "Frame the action: when the only thing happening is in a small part of a large still shot, push in on it.",
+      "When the only thing happening is in a small part of a large still shot, the camera pushes in on it.",
     why: "If someone is typing in an input at the bottom of a big empty window, the eye has nothing to do with the rest of the frame. The shot should be on the input.",
     fix: "Push in (scale the composition about the action) or crop to the region that's changing, then pull back when the next thing happens elsewhere. The finding gives the region.",
   },
@@ -148,8 +148,8 @@ export const creep = defineRule({
   options: { seconds: 1.2, area: 0.03 },
   docs: {
     summary:
-      "The camera never creeps: no slow, constant zoom or pan on the whole frame just to keep it moving.",
-    why: "A steady creep is the laziest way to make a frame technically move. It doesn't give the eye anything new, and it reads as filler. A camera move should be deliberate: it goes somewhere (pushes in on the action), eases, and settles. mographc doesn't count a creep as activity anyway.",
+      "There is no slow, constant zoom or pan on the whole frame added just to keep it moving.",
+    why: "A slow, constant zoom or pan makes the frame move without showing the viewer anything new, so it comes across as filler. A camera move should go to a subject (for example, push in on the action), ease, and settle. mographc doesn't count a creep as activity for `pace/activity`.",
     fix: "Keep the hold alive with content (build the next element in, reveal a detail, bring in the next beat) or make the camera move a deliberate eased push to a subject that then settles.",
   },
   check({ film, options, report }) {

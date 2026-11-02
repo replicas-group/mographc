@@ -162,7 +162,7 @@ export const smaller = defineRule({
   options: { tolerance: 0.1 },
   docs: {
     summary: "Cursors aren't smaller than in the approved cut.",
-    why: "A cursor is a character; shrinking it without a reason costs it presence.",
+    why: "The cursor is often the subject the viewer follows, so making it smaller without a reason makes it harder to follow.",
     fix: "Restore the approved size, or suppress with the reason if the change was deliberate.",
   },
   check({ film, baseline, options, report }) {
@@ -192,7 +192,7 @@ export const lessStretch = defineRule({
   docs: {
     summary:
       "Cursors stretch at speed at least as much as in the approved cut.",
-    why: "Losing squash and stretch takes the character out of a cursor.",
+    why: "With less stretch, a fast cursor looks stiffer than it did in the approved cut.",
     fix: "Restore the approved stretch, or check the cursor still moves as fast as it did.",
   },
   check({ film, baseline, report }) {
@@ -217,7 +217,7 @@ export const weakerEaseOut = defineRule({
   docs: {
     summary:
       "Each beat's main move eases out at least as strongly as in the approved cut.",
-    why: "A weaker settle on the same beat is the kind of change a person notices as 'it was better before'.",
+    why: "When the same move slows down less at the end than it did in the approved cut, people notice the film got worse even if they can't say why.",
     fix: "Restore the approved curve on that move.",
   },
   check({ film, baseline, report }) {

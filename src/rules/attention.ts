@@ -33,9 +33,9 @@ export const unreadText = defineRule({
   options: { minSeconds: 0.4, share: 0.3 },
   docs: {
     summary:
-      "A viewer gets to read the text the film asks them to: captions are read before they leave, and product text the eye starts on is finished.",
-    why: "A viewer reads about 3.5 words a second, and only where they're looking. A caption that's on screen long enough on its own can still go unread when something else holds the eye while it's up. Text that leaves half-read is the feeling of a film being too fast.",
-    fix: "Give the text its moment: nothing else new while it's read (hold the product still, or let the action finish first), fewer words, or more time. If the text doesn't matter, make it smaller or texture (lines instead of words).",
+      "Captions stay on screen until a viewer has read them, and product text that the viewer starts reading stays until they finish.",
+    why: "A viewer reads about 3.5 words a second, and only where they're looking. A caption that's on screen long enough on its own can still go unread when something else holds the eye while it's up. When text leaves before it has been read, the film feels too fast.",
+    fix: "Give the text time on its own, with nothing else new while it's read (hold the product still, or let the action finish first), fewer words, or more time. If the text doesn't matter, make it smaller or texture (lines instead of words).",
   },
   check({ film, options, report }) {
     const v = viewer(film);
@@ -71,9 +71,9 @@ export const competing = defineRule({
   options: { warnAbove: 0.15, errorAbove: 0.25, place: 0.15, seconds: 0.4 },
   docs: {
     summary:
-      "One thing to read at a time: two texts in different places rarely ask to be read at once.",
-    why: "The eye reads one place at a time. When a caption lands while a message types out elsewhere, the viewer reads neither properly and feels rushed, however good the motion is. Films people approved did this about 10% of the time; films they found overwhelming did it a quarter of the time or more.",
-    fix: "Sequence it: let one text finish (its words at 3.5 a second) before the next one starts, or make one of them the visual (the action) and keep words out of it. Two short things side by side can share a moment only if one is already read.",
+      "Two texts in different places rarely ask to be read at the same time.",
+    why: "The eye reads one place at a time. When a caption appears while a message types out elsewhere, the viewer can't read either properly and feels rushed. In the films we measured, the ones people approved did this about 10% of the time, and the ones they found overwhelming did it a quarter of the time or more.",
+    fix: "Show the texts one after the other: let one finish (its words at 3.5 a second) before the next one starts, or make one of them the visual (the action) and keep words out of it. Two short things side by side can share a moment only if one is already read.",
   },
   check({ film, options, report }) {
     const v = viewer(film);

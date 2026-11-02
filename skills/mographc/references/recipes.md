@@ -1,6 +1,6 @@
-# Recipes: motion that passes
+# Recipes: Remotion code that passes the rules
 
-Each recipe is plain Remotion, written as pure functions of `frame`.
+Each recipe is plain Remotion code, written as pure functions of `frame`, so every frame can be computed on its own and renders the same way each time.
 
 ## Easing
 
@@ -29,11 +29,11 @@ export const tween = (
   });
 ```
 
-How long a move takes is weight: a chip can snap in 6–8 frames, while a window travelling half the screen takes 20–30. The longer a move, the stronger its ease-out must be (`easing/weak-out`): above about 0.8 s, use a curve that ends flat, like `move` or `arrive`.
+Viewers judge how heavy an object is by how long it takes to move, so the duration should suit the object: a small chip can snap into place in 6 to 8 frames, while a window travelling half the screen should take 20 to 30. The longer a move, the stronger its ease-out must be (`easing/weak-out`): above about 0.8 s, use a curve that ends flat, like `move` or `arrive`.
 
-## A camera that's always on the action
+## A camera that frames the action
 
-Wrap each section in a camera that frames the region where the action is (`staging/small-action`). Move the focus and the scale between shots on one eased curve. Every camera move goes somewhere and settles. Never add a slow constant zoom or drift to keep a hold "moving": it isn't counted as movement, and `camera/creep` fails it. Keep holds alive with content instead.
+Wrap each section in a camera that frames the region where the action is (`staging/small-action`). Move the focus and the scale between shots on one eased curve. Every camera move should go to a subject and settle. Don't add a slow constant zoom or drift to make a hold look like it's moving: it isn't counted as movement, and `camera/creep` reports it. During a hold, keep the content changing instead.
 
 ```tsx
 type Shot = { at: number; x: number; y: number; scale: number }; // frame, the canvas point to centre, zoom
@@ -97,11 +97,11 @@ const rect = mixRect(ROW, WINDOW, t); // the screen rect eases
 const scale = rect.w / CONTENT_WIDTH; // content scale follows the rect
 ```
 
-Chaining two animations so one starts as the other ends (a layout change, then a transform) leaves a stall between them (`easing/stutter`). Overlap them, or drive both from one value.
+If two animations are chained so that one starts when the other ends (a layout change, then a transform), the speed drops to almost zero between them and the motion appears to hesitate (`easing/stutter`). Overlap them, or drive both from one value.
 
-## A cursor with character
+## A cursor with squash and stretch
 
-It enters from off the canvas, eases between targets, squashes on a click, stretches with its speed, and flings off the nearest edge when it's done. The `data-motion-tip` marker is its hotspot, so tests can check clicks land.
+This cursor enters from off the canvas, eases between targets, squashes on a click, stretches with its speed, and moves quickly off the nearest edge when it's done. The `data-motion-tip` marker is its hotspot, so tests can check that clicks land on their targets.
 
 ```tsx
 // A plain arrow on a 32 x 32 grid, tip at (3, 2). Swap in your brand's cursor.
@@ -196,15 +196,15 @@ export const Cursor: React.FC<{
 />;
 ```
 
-- **Path continuity.** When one path hands off to another (the cursor rides a page as it scales), start the new path exactly where the old one is at that frame. A different anchor point is a teleport (`continuity/jump`).
-- **Never fade a cursor out where it stands.** If it has to vanish into something (it turns into the next shot's element), suppress `cursor/dead-exit` on it, with the reason.
+- **Start a new path where the old one ends.** When one path hands off to another (for example, the cursor rides along with a page as it scales), start the new path exactly where the old one is at that frame. If the anchor points differ, the cursor jumps (`continuity/jump`).
+- **Don't fade a cursor out where it stands.** If it has to disappear into something (it turns into the next shot's element), suppress `cursor/dead-exit` on it, with the reason.
 
 ## Entrances and exits
 
-- Things arrive with an ease-out and a small move or scale on the same curve as their fade, never opacity alone (`animate/fade-only`).
-- Things leave with an ease-in, or by being pushed out by what replaces them. Never unmount something mid-shot (`frame < T ? <Chip /> : null`) without fading or moving it out first (`animate/pop-out`).
-- One text at a time in any spot: when a message replaces another in place, the old one is gone before the new one fades in, or is pushed clear of it (`layout/text-overlap`).
-- A container and its contents build together: start the contents' reveal while the container is still growing.
+- Bring things in with an ease-out and a small move or scale on the same curve as their fade, rather than a fade alone (`animate/fade-only`). The movement shows where the element came from.
+- Take things out with an ease-in, or have them pushed out by what replaces them. Don't unmount something mid-shot (`frame < T ? <Chip /> : null`) without fading or moving it out first (`animate/pop-out`).
+- Keep one text at a time in any spot. When a message replaces another in the same place, remove the old one before the new one fades in, or push it out of the way (`layout/text-overlap`), because overlapping words can't be read.
+- Build a container and its contents together: start revealing the contents while the container is still growing, so there's no moment where an empty container sits still.
 
 ## Typing
 
@@ -212,4 +212,4 @@ export const Cursor: React.FC<{
 const typed = TEXT.slice(0, Math.floor(Math.max(0, frame - start) * 1.2)); // about 36 characters a second
 ```
 
-Keep the caret's position continuous as the text grows. Changing text never counts as motion, so a typed line won't trip the jump check.
+Keep the caret's position continuous as the text grows. Changing text isn't counted as motion, so a typed line doesn't trigger the jump check.

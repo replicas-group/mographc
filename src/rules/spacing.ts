@@ -24,8 +24,8 @@ export const ambiguousCrop = defineRule({
   docs: {
     summary:
       "A subject is either framed with room or clearly cropped by the frame, never just touching or barely cut by its edge.",
-    why: "With room, the subject reads as placed; cropped deep, it reads as a close-up. An edge a few pixels inside the frame, or a sliver past it, reads as a mistake: crammed, not zoomed.",
-    fix: "Pick one: pull back until the edge has at least the room the finding gives, or push in until the frame clearly crops it.",
+    why: "A subject with space around it looks deliberately placed, and one that is cropped deeply looks like a close-up. An edge just inside the frame, or just past it, looks like a mistake, as if the subject didn't quite fit.",
+    fix: "Do one or the other: pull back until the edge has at least the room the finding gives, or push in until the frame clearly crops it.",
   },
   check({ film, options, report }) {
     const room = px(film, options.room);
@@ -81,7 +81,7 @@ export const unbalancedSpace = defineRule({
   docs: {
     summary:
       "Free text (a caption, a headline) is centred in the space it sits in, or lines up with something; it never floats at an unexplained offset.",
-    why: "The eye measures the space on each side of a line. Equal space reads as placed; a shared edge with the product reads as a grid. Lopsided space with no alignment reads as an accident.",
+    why: "Viewers notice the space on each side of a line of text. Equal space, or an edge shared with the product, looks intentional. Uneven space with no alignment looks accidental.",
     fix: "Centre the text between what's on either side of it (the product's edge and the frame's), or align its edge with an edge of the product. The finding gives both gaps.",
   },
   check({ film, options, report }) {

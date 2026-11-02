@@ -5,9 +5,7 @@ description: Use when making, editing or reviewing a motion graphics film in Rem
 
 # Making a Remotion film with mographc
 
-Most of the notes a person gives on a cut can be measured: a cursor that jumps, a move that stops without slowing down, a title a few pixels off-centre, a window with no padding around it. mographc measures every element on every frame of the film and reports those problems, so that when a person watches the cut they can comment on the idea rather than the mechanics.
-
-The goal for a cut you hand over is that the person watching it finds nothing measurable to fix.
+Most of the notes a person gives on a cut can be measured: a cursor that jumps, a move that stops without slowing down, a title a few pixels off-centre, a window with no padding around it. mographc measures every element on every frame of the film and reports those problems. Fix everything it reports before handing a cut over, so that the person watching it doesn't have to point out mechanical problems and can comment on the idea instead.
 
 ## 1. Set up
 
@@ -23,7 +21,7 @@ mographc runs on Node 22.13 or later and uses the project's own copy of Remotion
 
 ## 2. Plan before you animate
 
-1. **Write the story as a change.** In one sentence, say what things were like before the feature and what they are like now. A film that only shows the feature is a demo. Read [references/craft.md](references/craft.md#the-story) before writing the beats.
+1. **Write the story as a change.** In one sentence, say what things were like before the feature and what they are like now. A film that only shows the feature doesn't tell the viewer why it matters. Read [references/craft.md](references/craft.md#the-story) before writing the beats.
 2. **Write a beat sheet.**
    - **Structure:** a **hook** in the first 1.5 s (the problem or the tension, not the setup), the **turn** (the product acts), the **proof** (the result, shown concretely), the **payoff** (the claim), then the brand.
    - **Sections:** each idea gets its own section of 2 to 3 seconds. Three things to show are three sections, not one frame where three things happen.
@@ -36,7 +34,7 @@ mographc runs on Node 22.13 or later and uses the project's own copy of Remotion
      - what moves at every moment
      - the headline copy
      - the sound cue, if any
-3. **Write tests from the beat sheet** (step 4) before building each beat. At this point you know what you mean. After ten renders it becomes hard to see anything other than what you made.
+3. **Write tests from the beat sheet** (step 4) before building each beat. Before you build, you know exactly what each beat is meant to do. After many renders, it becomes hard to see the film as anything other than what you made, so tests written then tend to check the result instead of the intention.
 
 [references/craft.md](references/craft.md) covers staging, copy and the cursor. Those are judgment calls the tool can't make for you.
 
@@ -66,7 +64,7 @@ npx mographc verify      # compiler, linter and your tests; exits 1 on any error
 
 - **Fix every error.** Each finding says what was measured, what the rule needs, and how to fix it. `npx mographc explain <rule>` explains why the rule exists.
 - **Read every warning,** and fix it unless you can say why the film is right as it is.
-- **Don't weaken a rule to get a pass.** If breaking a rule is intended (for example, a cursor that turns into the next shot's element instead of leaving), suppress that one finding where it happens and give the reason:
+- **Don't weaken a rule to get a pass,** because the rule is there to catch something a viewer would notice. If breaking a rule is intended (for example, a cursor that turns into the next shot's element instead of leaving), suppress that one finding where it happens and give the reason:
   ```tsx
   <div data-motion="cursor:agent" data-motion-ignore="cursor/dead-exit: it turns into the share button">
   ```
@@ -75,7 +73,7 @@ npx mographc verify      # compiler, linter and your tests; exits 1 on any error
 
 ## 4. Write tests that record what you intended
 
-The linter knows general rules about motion. Only you know that the cursor is supposed to click _Send_ at 4.2 s. Put tests next to the composition in files ending in `.mographc.ts`:
+The linter checks general rules about motion, but it can't know what a particular film is meant to show, such as the cursor clicking _Send_ at 4.2 s. Tests record those intentions. Put tests next to the composition in files ending in `.mographc.ts`:
 
 ```ts
 import { describe, expect, loadFilm, test } from "mographc/test";
@@ -101,7 +99,7 @@ Each beat should have tests for its clicks, its readability, its collisions and 
 
 ## 5. Watch it, then hand it over
 
-The tool only catches what can be measured. Before handing over a cut:
+mographc only catches problems that can be measured, so also do the following before handing over a cut:
 
 - **Render the film and look at stills** at every transition, not only at the ends of beats.
 - **Answer the staging questions for each section,** and write down any "no" (see [references/craft.md](references/craft.md#staging-review)):

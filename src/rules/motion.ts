@@ -38,8 +38,9 @@ export const linear = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "A move that lands eases in and out; constant speed is incorrect.",
-    why: "Nothing physical starts and stops at full speed. Linear motion on a window or card reads mechanical and cheap.",
+    summary:
+      "A move that comes to rest eases in and out instead of travelling at constant speed.",
+    why: "Physical objects speed up and slow down, so a window or card that moves at constant speed and stops at full speed looks mechanical.",
     fix: "Drive the move with an eased curve (ease-in-out for a move between two rest points; ease-out for something arriving fast), not `interpolate` with no `easing`.",
   },
   check({ film, report }) {
@@ -69,8 +70,8 @@ export const weakOut = defineRule({
   },
   docs: {
     summary:
-      "The ease-out of a move scales with its length: a long move settles, a flick needn't.",
-    why: "A move that's on screen for a second but barely decelerates looks like it hits a wall. Measured as the share of the move's time spent covering its last 20% of distance (linear is 0.20).",
+      "The longer a move is, the more strongly it slows down at the end. A short flick needs little ease-out.",
+    why: "A move that lasts a second but barely slows down at the end looks like it hits a wall. The rule measures the share of the move's time spent covering its last 20% of distance (0.20 for constant speed).",
     fix: "Use a stronger ease-out (e.g. a bezier ending around (0.1, 1) or (0.2, 1)), or lengthen the move's settle. Below the floor it's an error; between the floor and the target it's a warning.",
   },
   check({ film, options, report }) {
@@ -105,8 +106,8 @@ export const noEaseIn = defineRule({
   severity: "warn",
   options: {},
   docs: {
-    summary: "An unhurried move that starts from rest on screen eases in.",
-    why: "Starting at full speed from a standstill looks like the object was kicked. A fast start is only right when it's hidden (entering from off screen) or the move is a quick flick.",
+    summary: "A slow move that starts from rest on screen eases in.",
+    why: "An object that goes from standing still to full speed at once looks as if it was kicked. A fast start is only right when the start is hidden (the object enters from off screen) or the move is a quick flick.",
     fix: "Use ease-in-out instead of ease-out for moves that start visibly at rest.",
   },
   check({ film, report }) {
@@ -137,8 +138,8 @@ export const abruptStop = defineRule({
   severity: "error",
   options: {},
   docs: {
-    summary: "A move decelerates into rest; it doesn't stop from speed.",
-    why: "If the last frames of a move are as fast as the ones before them, the object stops dead.",
+    summary: "A move slows down before it stops.",
+    why: "If the last frames of a move are as fast as the frames before them, the object stops suddenly, as if it hit something.",
     fix: "End the move on an ease-out. Check that the move isn't cut short by a range that ends before its curve finishes.",
   },
   check({ film, report }) {
@@ -167,7 +168,7 @@ export const stutter = defineRule({
   options: {},
   docs: {
     summary: "A move is one continuous curve, with no stall in the middle.",
-    why: "A dip to near-zero speed mid-move reads as a hiccup. It usually means two animations are chained or summed (a layout change, then a transform; two ramps that don't overlap).",
+    why: "When the speed drops to almost zero in the middle of a move, the move looks like it hesitates. This usually means two animations are chained or added together (a layout change, then a transform; two ramps that don't overlap).",
     fix: "Drive the whole motion from one progress value, or overlap the two animations so the speed never collapses between them.",
   },
   check({ film, report }) {
@@ -198,7 +199,7 @@ export const edgeReversal = defineRule({
   options: {},
   docs: {
     summary: "Every edge of a moving surface travels one way, then settles.",
-    why: "When a surface's scale and its layout change together, an edge can swell past where it lands and come back, or wind up against its travel. It reads as a wobble the curve never asked for.",
+    why: "When a surface's scale and its layout change together, an edge can swell past where it lands and come back, or wind up against its travel. The result looks like a wobble that isn't in the easing curve.",
     fix: "Ease the surface's on-screen rectangle itself (x, y, width, height on one curve) and derive scale or clipping from it, instead of easing scale and size separately.",
   },
   check({ film, report }) {
@@ -262,7 +263,7 @@ export const cursorStretch = defineRule({
   options: { speed: 900, stretch: 1.06 },
   docs: {
     summary: "A cursor moving fast stretches along its travel.",
-    why: "Squash and stretch gives fast, non-literal objects weight and character. A cursor that travels quickly without stretching reads stiff and dead.",
+    why: "Stretching a fast object along its direction of travel (squash and stretch, a standard animation technique) makes it look like it has weight. Without it, a fast cursor looks stiff.",
     fix: "Scale the cursor along its direction of travel in proportion to its speed (for example `1 + min(0.22, speed / 300)` per frame, smoothed), rotated to the travel angle.",
   },
   check({ film, options, report }) {
@@ -294,7 +295,7 @@ export const deadExit = defineRule({
   docs: {
     summary:
       "A cursor leaves by moving off the canvas, not by fading where it stands.",
-    why: "An exit is part of a character's motion. A cursor that fades in place, or simply vanishes, throws its exit (and its stretch) away.",
+    why: "A cursor that fades out or vanishes where it stands ends its motion abruptly. Moving it off the canvas completes the motion and shows the viewer where it went.",
     fix: "After its last action, fling the cursor off the nearest edge (a short, fast, eased-in move) instead of fading it.",
   },
   check({ film, report }) {
@@ -320,7 +321,7 @@ export const popsIn = defineRule({
   options: {},
   docs: {
     summary: "A cursor enters from off the canvas.",
-    why: "A cursor that appears in the middle of the frame has no entrance: it reads as a cut, not a hand arriving.",
+    why: "A cursor that appears in the middle of the frame looks like a cut. Entering from the edge shows it arriving, the way it would when a person moves a mouse.",
     fix: "Start the cursor's path off the canvas edge nearest its first target.",
   },
   check({ film, report }) {
@@ -344,8 +345,8 @@ export const harshSettle = defineRule({
   options: { warnAbove: 18000, errorAbove: 27000 },
   docs: {
     summary:
-      "A surface brakes like it has weight: its deceleration as it lands stays gentle, however far it travelled.",
-    why: "A bubble or card that crosses the frame in a third of a second has to shed all that speed in a few frames, so it reads as hitting a wall even on an ease-out curve. Timing is weight: only a cursor can move like that. Measured as the peak deceleration while it lands, in px/s² at 1080p.",
+      "A surface slows down gently as it lands, however far it travelled.",
+    why: "A bubble or card that crosses the frame in a third of a second has to lose all that speed in a few frames, so it looks like it hits a wall even on an ease-out curve. Viewers read the time an object takes to stop as its weight, and only a cursor is light enough to stop that quickly. Measured as the peak deceleration while it lands, in px/s² at 1080p.",
     fix: "Give the move more time (duration grows with distance: a half-screen move wants 0.6–0.9 s), or a shorter path, or a curve with a longer tail (e.g. bezier(0.16, 1, 0.3, 1) over more frames).",
   },
   check({ film, options, report }) {
@@ -397,8 +398,8 @@ export const cursorContrast = defineRule({
   options: { ratio: 1.6, seconds: 0.1 },
   docs: {
     summary: "A cursor always stands out from what it's over.",
-    why: "A cursor the same colour as the bar, button or chip under it vanishes exactly when it matters: the moment it points at something.",
-    fix: "Change what's under the cursor (a different colour for the hovered element, or a hover state that lightens it), or point at a different spot. Don't recolour the cursor away from the brand.",
+    why: "A cursor the same colour as the bar, button or chip under it disappears at the moment it matters most, when it points at something.",
+    fix: "Change what's under the cursor (a different colour for the hovered element, or a hover state that lightens it), or point at a different spot. Keep the cursor's own colour, because the viewer recognises it by that colour throughout the film.",
   },
   check({ film, options, report }) {
     for (const el of film.elements.filter((e) => e.role === "cursor")) {

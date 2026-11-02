@@ -1,8 +1,8 @@
-# Writing tests that encode intent
+# Writing tests that record what you intended
 
 The linter checks rules that apply to any film. Tests check what you intended for this particular film: that the cursor clicks _Send_ at 4.2 s, that the claim appears on the downbeat, that the PR page can be read on a phone. Write them from the beat sheet, before or while you build each beat, the way you would write tests for a function's contract.
 
-The timing matters. A test written after watching the render tends to describe what was made, mistakes included. A test written from the beat sheet records what you meant, so it can catch the difference between the two.
+When you write the tests matters. A test written after watching the render tends to describe what was made, including its mistakes. A test written from the beat sheet records what you meant, so it can catch differences between the two.
 
 ## Setup
 
@@ -98,4 +98,4 @@ describe("beat 3: ask your agent", () => {
 
 ## When a test fails
 
-The message gives the measured value: where the tip was versus the target's box, or which line was 14 px. Fix the scene, not the test. Change a test only when the _intent_ changed (the beat moved, the copy changed), and then change the beat sheet too.
+The failure message gives the measured value, such as where the cursor's tip was compared with the target's box, or which line of text was 14 px. Fix the scene rather than the test, because the test records what you meant. Change a test only when the intent has changed (the beat moved, or the copy changed), and update the beat sheet at the same time.
