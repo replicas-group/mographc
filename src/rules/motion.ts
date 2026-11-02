@@ -280,7 +280,7 @@ export const cursorStretch = defineRule({
   docs: {
     summary:
       "On frames where a cursor moves at 900 px/s or more, it is stretched to at least 1.06 along its direction of travel, on at least half of those frames.",
-    why: "Stretching a fast-moving object along its direction of travel is a standard animation technique (squash and stretch) that makes the object look like it has mass and speed. Without it, a fast cursor looks rigid. Stretch is the cursor's long side divided by its short side after all its transforms. The rule reports a cursor when at least 3 of its fast frames, and at least half of them, are stretched less than the threshold.",
+    why: "Stretching a fast-moving object along its direction of travel is a standard animation technique (squash and stretch) that makes the object look like it has mass and speed. Without it, a fast cursor looks rigid. Stretch is the cursor's long side divided by its short side after all its transforms. Speed is the cursor's own: measured against the nearest container much larger than it (a window, or a layer a camera moves), so frames where only that container moves don't count. The rule reports a cursor when at least 3 of its fast frames, and at least half of them, are stretched less than the threshold.",
     fix: "Scale the cursor along its direction of travel in proportion to its speed, rotated to the angle of travel, and smooth the scale over a few frames. For example, scale it by `1 + min(0.22, speed / 300)`.",
     options: {
       speed:
@@ -291,14 +291,11 @@ export const cursorStretch = defineRule({
   },
   check({ film, options, report }) {
     for (const el of cursors(film)) {
-      const flat = el.frames.filter(
-        (f) =>
-          el.step(f) * film.fps >= options.speed &&
-          el.at(f)!.stretch < options.stretch,
-      );
+      // Its own speed: a camera or window carrying it doesn't stretch it.
       const fast = el.frames.filter(
-        (f) => el.step(f) * film.fps >= options.speed,
+        (f) => el.ownStep(f) * film.fps >= options.speed,
       );
+      const flat = fast.filter((f) => el.at(f)!.stretch < options.stretch);
       if (flat.length >= 3 && flat.length >= 0.5 * fast.length)
         report({
           element: el,
@@ -317,21 +314,21 @@ export const deadExit = defineRule({
   options: {},
   docs: {
     summary:
-      "A cursor that disappears more than one frame before the film ends has its centre outside the canvas on its last frame, so it leaves past an edge.",
-    why: "A cursor that fades out or vanishes in the middle of the canvas ends its motion abruptly, and the viewer doesn't see where it went. Moving it off the edge of the canvas completes the motion, the way a person moves a mouse away.",
-    fix: "After the cursor's last click, move it off the nearest edge of the canvas with a short, fast move that eases in, instead of fading it out.",
+      "A cursor that disappears more than one frame before the film ends has its centre outside the canvas, or outside the clipping container it is inside (such as a window), on its last frame, so it leaves past an edge.",
+    why: "A cursor that fades out or vanishes in the middle of the canvas ends its motion abruptly, and the viewer doesn't see where it went. Moving it off the edge of the canvas completes the motion, the way a person moves a mouse away. A cursor inside a container that clips its content (`overflow: hidden` or a `clip-path`) leaves view at that container's edge, so that edge counts too.",
+    fix: "After the cursor's last click, move it off the nearest edge of the canvas (or of the window it is clipped to) with a short, fast move that eases in, instead of fading it out.",
   },
   check({ film, report }) {
     for (const el of cursors(film)) {
       const last = el.last;
       if (last >= film.frames[film.frames.length - 1] - 1) continue;
       const end = el.at(last)!;
-      if (!film.onCanvas(end)) continue;
+      if (!film.inView(end)) continue;
       report({
         element: el,
         frames: [Math.max(el.first, last - Math.round(film.fps * 0.3)), last],
         measured: `disappears while still on the canvas, moving at ${(el.step(last) * film.fps).toFixed(0)} px/s on its last frame`,
-        need: "the cursor leaves by moving past the edge of the canvas",
+        need: "the cursor leaves by moving past the edge of the canvas or of the container that clips it",
       });
     }
   },
@@ -344,19 +341,19 @@ export const popsIn = defineRule({
   options: {},
   docs: {
     summary:
-      "A cursor that first appears after the film's first frame has its centre outside the canvas on that frame, so it enters from an edge.",
-    why: "A cursor that suddenly appears in the middle of the canvas looks like a jump in the video. Entering from an edge shows it arriving, the way it does when a person moves a mouse onto the screen.",
-    fix: "Start the cursor's path outside the canvas, past the edge nearest its first target, and move it in.",
+      "A cursor that first appears after the film's first frame has its centre outside the canvas, or outside the clipping container it is inside (such as a window), on that frame, so it enters from an edge.",
+    why: "A cursor that suddenly appears in the middle of the canvas looks like a jump in the video. Entering from an edge shows it arriving, the way it does when a person moves a mouse onto the screen. A cursor inside a container that clips its content (`overflow: hidden` or a `clip-path`) comes into view at that container's edge, so that edge counts too.",
+    fix: "Start the cursor's path outside the canvas (or outside the window it is clipped to), past the edge nearest its first target, and move it in.",
   },
   check({ film, report }) {
     for (const el of cursors(film)) {
       const first = el.at(el.first)!;
-      if (el.first > film.frames[0] && film.onCanvas(first))
+      if (el.first > film.frames[0] && film.inView(first))
         report({
           element: el,
           frames: [el.first, el.first],
           measured: `first appears inside the canvas${first.opacity < 0.5 ? ", fading in" : ""}`,
-          need: "the cursor enters by moving in from past the edge of the canvas",
+          need: "the cursor enters by moving in from past the edge of the canvas or of the container that clips it",
         });
     }
   },

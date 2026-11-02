@@ -135,16 +135,43 @@ export class Element {
     const b = s.box;
     return `${this.role} ${Math.round(b[2])}x${Math.round(b[3])} at (${Math.round(b[0])}, ${Math.round(b[1])})`;
   }
-  /** px moved from the previous frame, or 0 when it wasn't there. */
+  /** px moved from the previous frame, or 0 when it wasn't there or was hidden in both frames. */
   step(frame: number) {
     const a = this.samples.get(frame - 1);
     const b = this.samples.get(frame);
     if (!a || !b) return 0;
     // Text that changes (typing, a counter) shifts its glyph box without moving.
     if (a.raw.x !== b.raw.x) return 0;
-    const p = centreOf(a);
-    const q = centreOf(b);
+    const shown = [a, b].map((s) => area(s.visible) > 0);
+    // Moving where it can't be seen (behind a clip, off the canvas) isn't motion the viewer sees.
+    if (!shown[0] && !shown[1]) return 0;
+    // Coming into view or leaving it: compare true positions, because the centre of what is visible
+    // shrinks to the clip's edge and would read as a jump.
+    const at =
+      shown[0] && shown[1]
+        ? centreOf
+        : (s: Sample) => ({
+            x: s.box[0] + s.box[2] / 2,
+            y: s.box[1] + s.box[3] / 2,
+          });
+    const p = at(a);
+    const q = at(b);
     return Math.hypot(q.x - p.x, q.y - p.y);
+  }
+  /**
+   * px it moved on its own from the previous frame: measured against the nearest container much
+   * larger than it, so a camera or a window carrying it doesn't count. Falls back to `step`.
+   */
+  ownStep(frame: number) {
+    const a = this.samples.get(frame - 1);
+    const b = this.samples.get(frame);
+    const [ra, rb] = [a?.raw.fr, b?.raw.fr];
+    if (!ra || !rb || !this.step(frame)) return this.step(frame);
+    const p = centreOf(a!);
+    const q = centreOf(b!);
+    const u = (q.x - rb[0]) / rb[2] - (p.x - ra[0]) / ra[2];
+    const v = (q.y - rb[1]) / rb[3] - (p.y - ra[1]) / ra[3];
+    return Math.hypot(u * rb[2], v * rb[3]);
   }
   /** Rows inside it in a frame: its text, icons and children. */
   contents(frame: number) {
@@ -185,8 +212,16 @@ export class Element {
         const distance = steps.reduce((a, b) => a + b, 0);
         const shares = easeShares(steps);
         const end = this.samples.get(to)!;
+        // It is seen at rest: a move cut off by a scene change, or by the element going behind a
+        // clip, isn't a landing. Judged on the frames after the move, not on whether the element
+        // comes back later in the film.
         const lands =
-          this.film.onCanvas(end) && end.opacity > 0.3 && this.last >= to + 2;
+          this.film.onCanvas(end) &&
+          end.opacity > 0.3 &&
+          [to, to + 1].every((g) => {
+            const s = this.samples.get(g);
+            return !!s && area(s.visible) > 0;
+          });
         out.push({
           from,
           to,
@@ -273,6 +308,8 @@ export class Film {
   readonly height: number;
   readonly durationInFrames: number;
   readonly elements: Element[] = [];
+  /** Tags carried by more than one element at once, with the frames where that happens. */
+  readonly duplicates = new Map<string, number[]>();
   private readonly byFrame = new Map<number, RawElement[]>();
   /** Which element each row belongs to, per frame. */
   private readonly owner = new Map<number, Map<string, Element>>();
@@ -307,6 +344,19 @@ export class Film {
     const c = { x: s.box[0] + s.box[2] / 2, y: s.box[1] + s.box[3] / 2 };
     return c.x >= 0 && c.x <= this.width && c.y >= 0 && c.y <= this.height;
   }
+  /** Its centre is inside the canvas and inside the clip around it (a window it lives in). */
+  inView(s: Sample) {
+    const c = { x: s.box[0] + s.box[2] / 2, y: s.box[1] + s.box[3] / 2 };
+    const b = s.raw.cb;
+    return (
+      this.onCanvas(s) &&
+      (!b ||
+        (c.x >= b[0] &&
+          c.x <= b[0] + b[2] &&
+          c.y >= b[1] &&
+          c.y <= b[1] + b[3]))
+    );
+  }
   get(id: string) {
     const e = this.elements.find((x) => x.id === id);
     if (!e) {
@@ -338,6 +388,7 @@ export class Film {
       {
         el: Element;
         centre: { x: number; y: number };
+        velocity: { x: number; y: number };
         text?: string;
         size: [number, number];
         key: string;
@@ -350,20 +401,10 @@ export class Film {
       const byKey = new Map(rows.map((r) => [r.k, r]));
       const owners = new Map<string, Element>();
       const groups = new Map<string, RawElement[]>();
-      const tagCount = new Map<string, number>();
+      const byTag = new Map<string, RawElement[]>();
       for (const r of rows) {
         if (r.id) {
-          const n = tagCount.get(r.id) ?? 0;
-          tagCount.set(r.id, n + 1);
-          const id = n ? `${r.id}#${n + 1}` : r.id;
-          let el = tagged.get(id);
-          if (!el) {
-            const role = ROLE_ALIASES[r.id.split(":")[0]] ?? r.id.split(":")[0];
-            el = new Element(this, id, role, true);
-            tagged.set(id, el);
-            this.elements.push(el);
-          }
-          this.add(el, f, r, owners);
+          byTag.set(r.id, [...(byTag.get(r.id) ?? []), r]);
           continue;
         }
         // Text content isn't part of the shape, so a line typing out stays one element.
@@ -372,11 +413,61 @@ export class Film {
         g.push(r);
         groups.set(shape, g);
       }
+      // Two elements on screen with one tag: each keeps the identity it had in the previous frame
+      // (the same node, else the nearest), so neither appears to jump to the other's place.
+      for (const [tag, rs] of byTag) {
+        if (rs.length > 1)
+          this.duplicates.set(tag, [...(this.duplicates.get(tag) ?? []), f]);
+        const ids = (n: number) => (n ? `${tag}#${n + 1}` : tag);
+        const before: Element[] = [];
+        for (let n = 0; tagged.has(ids(n)); n += 1) {
+          const el = tagged.get(ids(n))!;
+          if (el.at(f - 1)) before.push(el);
+        }
+        const assigned = new Map<RawElement, Element>();
+        for (const r of rs) {
+          const same = before.find((el) => el.at(f - 1)!.raw.k === r.k);
+          if (same && rs.length > 1) assigned.set(r, same);
+        }
+        for (const r of rs) {
+          if (assigned.has(r)) continue;
+          const free = before.filter(
+            (el) => ![...assigned.values()].includes(el),
+          );
+          const centre = (b: Box) => [b[0] + b[2] / 2, b[1] + b[3] / 2];
+          const [x, y] = centre(r.b);
+          const near = free.sort((a, b) => {
+            const [ax, ay] = centre(a.at(f - 1)!.box);
+            const [bx, by] = centre(b.at(f - 1)!.box);
+            return Math.hypot(ax - x, ay - y) - Math.hypot(bx - x, by - y);
+          })[0];
+          if (near) {
+            assigned.set(r, near);
+            continue;
+          }
+          let n = 0;
+          while (
+            [...assigned.values()].some((el) => el.id === ids(n)) ||
+            tagged.get(ids(n))?.at(f - 1)
+          )
+            n += 1;
+          let el = tagged.get(ids(n));
+          if (!el) {
+            const role = ROLE_ALIASES[tag.split(":")[0]] ?? tag.split(":")[0];
+            el = new Element(this, ids(n), role, true);
+            tagged.set(ids(n), el);
+            this.elements.push(el);
+          }
+          assigned.set(r, el);
+        }
+        for (const r of rs) this.add(assigned.get(r)!, f, r, owners);
+      }
       const cur = new Map<
         string,
         {
           el: Element;
           centre: { x: number; y: number };
+          velocity: { x: number; y: number };
           text?: string;
           size: [number, number];
           key: string;
@@ -401,9 +492,11 @@ export class Film {
           rs.forEach((r, i) =>
             cands.forEach((c, j) =>
               pairs.push([
+                // Compared with where it was heading, so two alike elements crossing paths keep
+                // their identities.
                 Math.hypot(
-                  centres[i].x - c.centre.x,
-                  centres[i].y - c.centre.y,
+                  centres[i].x - c.centre.x - c.velocity.x,
+                  centres[i].y - c.centre.y - c.velocity.y,
                 ) +
                   (r.x === c.text ? 0 : 60) +
                   150 * (ratio(r.b[2], c.size[0]) + ratio(r.b[3], c.size[1])),
@@ -433,9 +526,16 @@ export class Film {
           }
           this.add(el, f, r, owners);
           const list = cur.get(shape) ?? [];
+          const was = prev.get(shape)?.find((c) => c.el === el);
           list.push({
             el,
             centre: centres[i],
+            velocity: was
+              ? {
+                  x: centres[i].x - was.centre.x,
+                  y: centres[i].y - was.centre.y,
+                }
+              : { x: 0, y: 0 },
             text: r.x,
             size: [r.b[2], r.b[3]],
             key: r.k,

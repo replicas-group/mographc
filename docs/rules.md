@@ -12,19 +12,29 @@ Compiler rule, always on.
 
 No element moves or changes size by more than 40 px at 1080p in a single frame when that change is also more than 4 times the largest change 2 to 3 frames before or after it (or 4 px at 1080p, if that is larger).
 
-**Why:** A viewer sees a sudden jump in position or size as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component replaced by another at a new position. For each frame, the rule takes the larger of how far the element's centre moved and how much the diagonal of its box changed (for a cursor, only how far it moved, because a cursor shrinking as it clicks is intended). Frames where the element is below 30% opacity, or where its text changed (typing, a counter), are skipped, and a jump spread over two neighbouring frames, as when a 30 fps animation is rendered at 60 fps, counts as one jump.
+**Why:** A viewer sees a sudden jump in position or size as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component replaced by another at a new position. For each frame, the rule takes the larger of how far the element's centre moved and how much the diagonal of its box changed (for a cursor, only how far it moved, because a cursor shrinking as it clicks is intended). The centre is that of the part of the element that is visible; on a frame where it goes out of view or comes into view (behind a clipping container or past the canvas edge), its true positions are compared instead. Frames where the element is below 30% opacity or hidden in both frames, where its text changed (typing, a counter), or where it shifts by no more than a text near it changed size (a neighbour reflowing around a word that changed) are skipped, and a jump spread over two neighbouring frames, as when a 30 fps animation is rendered at 60 fps, counts as one jump.
 
 **Fix:** Go to the frames in the finding and make the motion before and after them start and end at the same position and size. If one element replaces another, start the new one exactly where the old one ends.
+
+### `continuity/duplicate-tag`
+
+Compiler rule, always on.
+
+No two elements on screen in the same frame carry the same `data-motion` tag.
+
+**Why:** A tag names one element, and findings and tests follow it from frame to frame by that name. When two elements carry the same tag at once, mographc can't tell which is which: measurements of one may be read as the other's, and a test of the tag checks whichever it finds. mographc keeps them apart as `tag`, `tag#2` and so on, matching each to where it was in the previous frame, and reports the tag with the frames where it is shared.
+
+**Fix:** Give each element its own tag, for example by adding an index or a name (`card:step-1`, `card:step-2`). If the two are one element shown twice during a transition, tag only the one the film is about.
 
 ### `continuity/flicker`
 
 Compiler rule, always on.
 
-No element is visible for 0.07 s or less (2 frames at 30 fps) and never again.
+No element is visible for 0.07 s or less (2 frames at 30 fps) at a time, with frames where it isn't visible on both sides.
 
-**Why:** An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch. The rule counts an element as visible in a frame when it is above 30% opacity and its visible part covers more than 0.3% of the canvas. It reports an element whose visible frames form a single unbroken run of 0.07 s or less, and that is present in the film, visible or not, for at most 2 frames longer than that.
+**Why:** An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch: something shown by mistake for a frame, or something that blinks off and on. The rule counts an element as visible in a frame when it is above 30% opacity and its visible part covers more than 0.1% of the canvas (about 45 × 45 px at 1080p). It reports each unbroken run of visible frames lasting 0.07 s or less, unless the run touches the start or end of the film, the element moves more than 40 px at 1080p across it (it is passing through the view), or an identical element stands in the same place on the frame before or after it (one copy replacing another).
 
-**Fix:** Check the conditions that show the element at that time. Usually the end of a frame range is off by one, or an element's exit and the next element's entrance overlap by a frame.
+**Fix:** Check the conditions that show and hide the element at that time. Usually the end of a frame range is off by one, or an element's exit and the next element's entrance overlap by a frame.
 
 ## layout
 
@@ -93,7 +103,7 @@ Compiler rule, always on.
 
 All text is drawn in the font its CSS declares, never in a fallback font because the declared font didn't load.
 
-**Why:** A fallback font changes the width of every line and the look of the brand, so a layout designed for the real font breaks. The rule reports each declared font family that the browser replaced with a fallback in any frame, with the first and last frame where that happened.
+**Why:** A fallback font changes the width of every line and the look of the brand, so a layout designed for the real font breaks. The rule reports each font family that was drawn in a fallback in any frame, with the first and last frame where that happened: a family declared with `@font-face` that didn't load, or a family that is neither declared nor installed on the machine rendering the film. A font stack that names another family that is available (`Helvetica, Arial, sans-serif`) chose its fallback on purpose and isn't reported.
 
 **Fix:** Load the font before the frames render: call `loadFont()` from `@remotion/google-fonts`, or load a `FontFace` and pause rendering with `delayRender` until it has loaded.
 
@@ -191,7 +201,7 @@ Default: error.
 
 On frames where a cursor moves at 900 px/s or more, it is stretched to at least 1.06 along its direction of travel, on at least half of those frames.
 
-**Why:** Stretching a fast-moving object along its direction of travel is a standard animation technique (squash and stretch) that makes the object look like it has mass and speed. Without it, a fast cursor looks rigid. Stretch is the cursor's long side divided by its short side after all its transforms. The rule reports a cursor when at least 3 of its fast frames, and at least half of them, are stretched less than the threshold.
+**Why:** Stretching a fast-moving object along its direction of travel is a standard animation technique (squash and stretch) that makes the object look like it has mass and speed. Without it, a fast cursor looks rigid. Stretch is the cursor's long side divided by its short side after all its transforms. Speed is the cursor's own: measured against the nearest container much larger than it (a window, or a layer a camera moves), so frames where only that container moves don't count. The rule reports a cursor when at least 3 of its fast frames, and at least half of them, are stretched less than the threshold.
 
 **Fix:** Scale the cursor along its direction of travel in proportion to its speed, rotated to the angle of travel, and smooth the scale over a few frames. For example, scale it by `1 + min(0.22, speed / 300)`.
 
@@ -204,21 +214,21 @@ On frames where a cursor moves at 900 px/s or more, it is stretched to at least 
 
 Default: error.
 
-A cursor that disappears more than one frame before the film ends has its centre outside the canvas on its last frame, so it leaves past an edge.
+A cursor that disappears more than one frame before the film ends has its centre outside the canvas, or outside the clipping container it is inside (such as a window), on its last frame, so it leaves past an edge.
 
-**Why:** A cursor that fades out or vanishes in the middle of the canvas ends its motion abruptly, and the viewer doesn't see where it went. Moving it off the edge of the canvas completes the motion, the way a person moves a mouse away.
+**Why:** A cursor that fades out or vanishes in the middle of the canvas ends its motion abruptly, and the viewer doesn't see where it went. Moving it off the edge of the canvas completes the motion, the way a person moves a mouse away. A cursor inside a container that clips its content (`overflow: hidden` or a `clip-path`) leaves view at that container's edge, so that edge counts too.
 
-**Fix:** After the cursor's last click, move it off the nearest edge of the canvas with a short, fast move that eases in, instead of fading it out.
+**Fix:** After the cursor's last click, move it off the nearest edge of the canvas (or of the window it is clipped to) with a short, fast move that eases in, instead of fading it out.
 
 ### `cursor/pops-in`
 
 Default: error.
 
-A cursor that first appears after the film's first frame has its centre outside the canvas on that frame, so it enters from an edge.
+A cursor that first appears after the film's first frame has its centre outside the canvas, or outside the clipping container it is inside (such as a window), on that frame, so it enters from an edge.
 
-**Why:** A cursor that suddenly appears in the middle of the canvas looks like a jump in the video. Entering from an edge shows it arriving, the way it does when a person moves a mouse onto the screen.
+**Why:** A cursor that suddenly appears in the middle of the canvas looks like a jump in the video. Entering from an edge shows it arriving, the way it does when a person moves a mouse onto the screen. A cursor inside a container that clips its content (`overflow: hidden` or a `clip-path`) comes into view at that container's edge, so that edge counts too.
 
-**Fix:** Start the cursor's path outside the canvas, past the edge nearest its first target, and move it in.
+**Fix:** Start the cursor's path outside the canvas (or outside the window it is clipped to), past the edge nearest its first target, and move it in.
 
 ### `cursor/low-contrast`
 
@@ -376,9 +386,9 @@ While a surface (a window, card or panel) covers 25% to 95% of the canvas, the m
 
 Default: error.
 
-A headline never lies partly over a surface (a window, card or panel) for 0.2 s or longer, where partly means that 5% to 85% of the headline's area is over the surface.
+A headline never lies partly over a surface (a window, card or panel) for 0.2 s or longer, where partly means that 5% to 85% of the headline's visible area is over the surface.
 
-**Why:** Text that cuts across an interface looks like a layout mistake and makes both the words and the product harder to read. The rule compares each headline with every surface above 25% opacity that covers 2% to 90% of the canvas. A headline inside the surface, and a box drawn by the headline's own component (such as a highlight behind its words), don't count.
+**Why:** Text that cuts across an interface looks like a layout mistake and makes both the words and the product harder to read. The rule compares the visible part of each headline (what a clipping container or the canvas edge doesn't hide) with every surface above 25% opacity that covers 2% to 90% of the canvas. A headline inside the surface, and a box drawn by the headline's own component (such as a highlight behind its words), don't count.
 
 **Fix:** Give the headline its own area of the canvas, or move the surface off screen before the headline appears (or the headline before the surface appears).
 
@@ -494,7 +504,7 @@ Default: warn.
 
 An element at least as large as a 70 × 70 px square at 1080p does not appear in a single frame at 80% opacity or more inside a container element that is standing still.
 
-**Why:** Something that becomes fully visible from one frame to the next while everything around it stays still looks like a jump in the video rather than the product responding. The rule checks each element on the frame it first appears, except cursors and elements already on screen in the film's first frame. It reports the element when it is at 80% opacity or more, its visible area is at least 70 × 70 px at 1080p, and its parent element was already on screen in the previous frame and moved less than 0.5 px.
+**Why:** Something that becomes fully visible from one frame to the next while everything around it stays still looks like a jump in the video rather than the product responding. The rule checks each element on the frame it first appears, except cursors and elements already on screen in the film's first frame. It reports the element when it is at 80% opacity or more, its visible area is at least 70 × 70 px at 1080p, and its parent element was already on screen in the previous frame and moved less than 0.5 px. An element that is still animating in is not reported: one moving at 300 px/s at 1080p or more on its next frame, one that arrives partly hidden by the edge of the canvas or of a clipping container and keeps moving, or one whose visible area grows by more than 10% on its next frame. An SVG's size is measured from its visible shapes, so a logo whose parts grow from nothing is measured as it grows.
 
 **Fix:** Fade, scale or slide the element in over several frames, or bring it in together with its container so they arrive as one.
 

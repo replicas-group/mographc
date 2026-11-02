@@ -244,8 +244,8 @@ export const textOverProduct = defineRule({
   options: { seconds: 0.2 },
   docs: {
     summary:
-      "A headline never lies partly over a surface (a window, card or panel) for 0.2 s or longer, where partly means that 5% to 85% of the headline's area is over the surface.",
-    why: "Text that cuts across an interface looks like a layout mistake and makes both the words and the product harder to read. The rule compares each headline with every surface above 25% opacity that covers 2% to 90% of the canvas. A headline inside the surface, and a box drawn by the headline's own component (such as a highlight behind its words), don't count.",
+      "A headline never lies partly over a surface (a window, card or panel) for 0.2 s or longer, where partly means that 5% to 85% of the headline's visible area is over the surface.",
+    why: "Text that cuts across an interface looks like a layout mistake and makes both the words and the product harder to read. The rule compares the visible part of each headline (what a clipping container or the canvas edge doesn't hide) with every surface above 25% opacity that covers 2% to 90% of the canvas. A headline inside the surface, and a box drawn by the headline's own component (such as a highlight behind its words), don't count.",
     fix: "Give the headline its own area of the canvas, or move the surface off screen before the headline appears (or the headline before the surface appears).",
     options: {
       seconds: "The shortest overlap, in seconds, that is reported.",
@@ -280,8 +280,10 @@ export const textOverProduct = defineRule({
               ? root.split("/").length > 2
               : area(container.v) < 0.5 * film.area);
           if (isAncestor(ss.raw.k, hs.raw.k) || own) continue;
-          const ov = intersectArea(hs.box, ss.visible);
-          if (ov > 0.05 * area(hs.box) && ov < 0.85 * area(hs.box)) {
+          // Only what is shown of the headline: a part clipped away can't cross the surface.
+          const ov = intersectArea(hs.visible, ss.visible);
+          const shown = area(hs.visible);
+          if (ov > 0.05 * shown && ov < 0.85 * shown) {
             const key = `${h.id}|${sEl.id}`;
             const hit = hits.get(key) ?? { el: h, other: sEl, frames: [] };
             hit.frames.push(f);
@@ -526,7 +528,7 @@ export const popIn = defineRule({
   docs: {
     summary:
       "An element at least as large as a 70 × 70 px square at 1080p does not appear in a single frame at 80% opacity or more inside a container element that is standing still.",
-    why: "Something that becomes fully visible from one frame to the next while everything around it stays still looks like a jump in the video rather than the product responding. The rule checks each element on the frame it first appears, except cursors and elements already on screen in the film's first frame. It reports the element when it is at 80% opacity or more, its visible area is at least 70 × 70 px at 1080p, and its parent element was already on screen in the previous frame and moved less than 0.5 px.",
+    why: "Something that becomes fully visible from one frame to the next while everything around it stays still looks like a jump in the video rather than the product responding. The rule checks each element on the frame it first appears, except cursors and elements already on screen in the film's first frame. It reports the element when it is at 80% opacity or more, its visible area is at least 70 × 70 px at 1080p, and its parent element was already on screen in the previous frame and moved less than 0.5 px. An element that is still animating in is not reported: one moving at 300 px/s at 1080p or more on its next frame, one that arrives partly hidden by the edge of the canvas or of a clipping container and keeps moving, or one whose visible area grows by more than 10% on its next frame. An SVG's size is measured from its visible shapes, so a logo whose parts grow from nothing is measured as it grows.",
     fix: "Fade, scale or slide the element in over several frames, or bring it in together with its container so they arrive as one.",
   },
   check({ film, report }) {
@@ -534,6 +536,16 @@ export const popIn = defineRule({
       if (el.role === "cursor" || el.first === film.frames[0]) continue;
       const s = el.at(el.first)!;
       if (s.opacity < 0.8 || area(s.visible) < px(film, 70) * px(film, 70))
+        continue;
+      // Animated in after all: sliding in partly hidden by an edge (of the canvas or a clip) and
+      // still moving, already moving fast when first seen, or still growing.
+      const speed = el.step(el.first + 1) * film.fps;
+      const next = el.at(el.first + 1);
+      if (
+        speed >= px(film, 300) ||
+        (speed >= px(film, 45) && area(s.visible) < 0.95 * area(s.box)) ||
+        (next && area(next.visible) > 1.1 * area(s.visible))
+      )
         continue;
       const parent = s.raw.k.split("/").slice(0, -1).join("/");
       const owner = film.elementOf(el.first, parent);

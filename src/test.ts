@@ -15,6 +15,7 @@ import { loadConfig } from "./config.ts";
 import {
   area,
   centreOf,
+  intersect,
   intersectArea,
   isAncestor,
   type Element,
@@ -121,7 +122,14 @@ const matchers = {
   ) {
     const f = Math.round(when.at * el.film.fps);
     const s = el.at(f);
-    const box = Array.isArray(target) ? target : target.at(f)?.visible;
+    // A tagged button is its whole box, padding included, not the letters of its label.
+    const t = Array.isArray(target) ? undefined : target.at(f);
+    const box = Array.isArray(target)
+      ? target
+      : t &&
+        (t.raw.eb
+          ? intersect(t.raw.eb, [0, 0, el.film.width, el.film.height])
+          : t.visible);
     if (!s || !box)
       return result(
         false,

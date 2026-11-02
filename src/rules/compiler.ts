@@ -14,57 +14,78 @@ export const jump = defineRule({
   docs: {
     summary:
       "No element moves or changes size by more than 40 px at 1080p in a single frame when that change is also more than 4 times the largest change 2 to 3 frames before or after it (or 4 px at 1080p, if that is larger).",
-    why: "A viewer sees a sudden jump in position or size as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component replaced by another at a new position. For each frame, the rule takes the larger of how far the element's centre moved and how much the diagonal of its box changed (for a cursor, only how far it moved, because a cursor shrinking as it clicks is intended). Frames where the element is below 30% opacity, or where its text changed (typing, a counter), are skipped, and a jump spread over two neighbouring frames, as when a 30 fps animation is rendered at 60 fps, counts as one jump.",
+    why: "A viewer sees a sudden jump in position or size as a glitch. It is almost always caused by two keyframes or two layouts that don't meet: a path that resumes from a different point than where it stopped, or a component replaced by another at a new position. For each frame, the rule takes the larger of how far the element's centre moved and how much the diagonal of its box changed (for a cursor, only how far it moved, because a cursor shrinking as it clicks is intended). The centre is that of the part of the element that is visible; on a frame where it goes out of view or comes into view (behind a clipping container or past the canvas edge), its true positions are compared instead. Frames where the element is below 30% opacity or hidden in both frames, where its text changed (typing, a counter), or where it shifts by no more than a text near it changed size (a neighbour reflowing around a word that changed) are skipped, and a jump spread over two neighbouring frames, as when a 30 fps animation is rendered at 60 fps, counts as one jump.",
     fix: "Go to the frames in the finding and make the motion before and after them start and end at the same position and size. If one element replaces another, start the new one exactly where the old one ends.",
   },
   check({ film, report }) {
+    const big = px(film, 40);
+    // Text that changes (a verb, a counter) reflows what is laid out around it: a neighbour that
+    // shifts by no more than that text changed size hasn't jumped.
+    const reflowed = (f: number, key: string, shift: number) => {
+      const parts = key.split("/");
+      const scope = parts.slice(0, Math.max(2, parts.length - 3)).join("/");
+      const before = new Map(film.rows(f - 1).map((r) => [r.k, r]));
+      return film.rows(f).some((r) => {
+        const q = before.get(r.k);
+        return (
+          q &&
+          r.k !== key &&
+          q.x !== r.x &&
+          isAncestor(scope, r.k) &&
+          Math.abs(r.b[2] - q.b[2]) + Math.abs(r.b[3] - q.b[3]) + px(film, 2) >=
+            shift
+        );
+      });
+    };
     for (const el of film.elements) {
-      const fs = el.frames;
-      const change = fs.map((f, i) => {
-        const prev = el.at(fs[i - 1]);
+      const change = new Map<number, number>();
+      for (const f of el.frames) {
+        const prev = el.at(f - 1);
         const cur = el.at(f)!;
-        // Text that changes (typing, a counter) changes size without moving.
+        // Text that changes (typing, a counter) changes size without moving. Where none of the
+        // element is visible in either frame, it can't be seen to jump.
         if (
           !prev ||
-          fs[i - 1] !== f - 1 ||
           prev.opacity < 0.3 ||
           cur.opacity < 0.3 ||
-          prev.raw.x !== cur.raw.x
+          prev.raw.x !== cur.raw.x ||
+          (!area(prev.visible) && !area(cur.visible))
         )
-          return 0;
+          continue;
         const size = (s: typeof cur) => Math.hypot(s.box[2], s.box[3]);
         // A cursor's press squash changes its size in a frame by design; its position is what jumps.
-        return el.role === "cursor"
-          ? el.step(f)
-          : Math.max(el.step(f), Math.abs(size(cur) - size(prev)));
-      });
-      change.forEach((c, i) => {
+        const c =
+          el.role === "cursor"
+            ? el.step(f)
+            : Math.max(el.step(f), Math.abs(size(cur) - size(prev)));
+        if (c > big && reflowed(f, cur.raw.k, c)) continue;
+        change.set(f, c);
+      }
+      const at = (f: number) => change.get(f) ?? 0;
+      for (const [f, c] of change) {
         // Compared with motion two or three frames away, so a jump rendered across two frames (60 fps
         // from 30 fps keys) still stands out; its other half may be the frame right beside it.
         const around = Math.max(
-          change[i - 2] ?? 0,
-          change[i + 2] ?? 0,
-          change[i - 3] ?? 0,
-          change[i + 3] ?? 0,
+          at(f - 2),
+          at(f + 2),
+          at(f - 3),
+          at(f + 3),
           px(film, 4),
         );
-        const pair = Math.max(change[i - 1] ?? 0, change[i + 1] ?? 0);
+        const pair = Math.max(at(f - 1), at(f + 1));
         const isJump =
-          c > px(film, 40) &&
-          c > 4 * around &&
-          (pair < px(film, 40) || pair > 0.5 * c);
-        const first =
-          isJump && !(pair > 0.5 * c && (change[i - 1] ?? 0) > px(film, 40));
+          c > big && c > 4 * around && (pair < big || pair > 0.5 * c);
+        const first = isJump && !(pair > 0.5 * c && at(f - 1) > big);
         // A child carried by a jumping parent is the parent's jump, reported once.
-        if (first && !carried(film, fs[i], el.at(fs[i])!.raw.k)) {
+        if (first && !carried(film, f, el.at(f)!.raw.k)) {
           report({
             element: el,
-            frames: [fs[i - 1], fs[i]],
+            frames: [f - 1, f],
             measured: `moves or changes size by ${c.toFixed(0)} px in one frame, while the largest change 2 to 3 frames before or after is ${around.toFixed(0)} px`,
             need: "a continuous path, with no single-frame change over 40 px at 1080p that is more than 4 times the change in the frames around it",
           });
         }
-      });
+      }
     }
   },
 });
@@ -76,29 +97,53 @@ export const flicker = defineRule({
   options: {},
   docs: {
     summary:
-      "No element is visible for 0.07 s or less (2 frames at 30 fps) and never again.",
-    why: "An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch. The rule counts an element as visible in a frame when it is above 30% opacity and its visible part covers more than 0.3% of the canvas. It reports an element whose visible frames form a single unbroken run of 0.07 s or less, and that is present in the film, visible or not, for at most 2 frames longer than that.",
-    fix: "Check the conditions that show the element at that time. Usually the end of a frame range is off by one, or an element's exit and the next element's entrance overlap by a frame.",
+      "No element is visible for 0.07 s or less (2 frames at 30 fps) at a time, with frames where it isn't visible on both sides.",
+    why: "An element that is on screen for only a frame or two is too brief to read but long enough to notice, so it looks like a glitch: something shown by mistake for a frame, or something that blinks off and on. The rule counts an element as visible in a frame when it is above 30% opacity and its visible part covers more than 0.1% of the canvas (about 45 × 45 px at 1080p). It reports each unbroken run of visible frames lasting 0.07 s or less, unless the run touches the start or end of the film, the element moves more than 40 px at 1080p across it (it is passing through the view), or an identical element stands in the same place on the frame before or after it (one copy replacing another).",
+    fix: "Check the conditions that show and hide the element at that time. Usually the end of a frame range is off by one, or an element's exit and the next element's entrance overlap by a frame.",
   },
   check({ film, report }) {
     const longest = framesIn(film, 0.07);
+    const [start, end] = [film.frames[0], film.frames[film.frames.length - 1]];
+    const shape = (k: string) => k.replace(/#\d+/g, "");
+    const centre = (b: number[]) => [b[0] + b[2] / 2, b[1] + b[3] / 2];
+    const near = (a: number[], b: number[], d: number) =>
+      Math.hypot(centre(a)[0] - centre(b)[0], centre(a)[1] - centre(b)[1]) <= d;
     for (const el of film.elements) {
       const seen = el.frames.filter((f) => {
         const s = el.at(f)!;
-        return s.opacity > 0.3 && area(s.visible) > 0.003 * film.area;
+        return s.opacity > 0.3 && area(s.visible) > 0.001 * film.area;
       });
-      if (!seen.length) continue;
-      const spans = runs(seen, 1);
-      if (
-        spans.length === 1 &&
-        spans[0][1] - spans[0][0] + 1 <= longest &&
-        el.frames.length <= longest + 2
-      ) {
+      for (const [a, b] of runs(seen, 1)) {
+        if (b - a + 1 > longest || a === start || b === end) continue;
+        const [first, last] = [el.at(a)!, el.at(b)!];
+        const passing = [
+          el.at(a - 1)?.box ?? first.box,
+          el.at(b + 1)?.box ?? last.box,
+        ];
+        if (!near(passing[0], passing[1], px(film, 40))) continue;
+        const replaced = [
+          [a - 1, first],
+          [b + 1, last],
+        ].some(([g, s]) =>
+          film.elements.some((o) => {
+            const t = o.at(g as number);
+            const x = s as typeof first;
+            return (
+              o !== el &&
+              !!t &&
+              t.opacity > 0.3 &&
+              shape(t.raw.k) === shape(x.raw.k) &&
+              t.raw.x === x.raw.x &&
+              near(t.box, x.box, px(film, 8))
+            );
+          }),
+        );
+        if (replaced) continue;
         report({
           element: el,
-          frames: spans[0],
-          measured: `is visible for ${spans[0][1] - spans[0][0] + 1} frame(s) and at no other time`,
-          need: "the element is visible for longer than 0.07 s, or not shown at all",
+          frames: [a, b],
+          measured: `is visible for ${b - a + 1} frame(s) (${((b - a + 1) / film.fps).toFixed(2)} s), with frames where it isn't visible before and after`,
+          need: "the element stays visible for longer than 0.07 s each time it is shown, or isn't shown at all",
         });
       }
     }
@@ -177,7 +222,7 @@ export const fallbackFont = defineRule({
   docs: {
     summary:
       "All text is drawn in the font its CSS declares, never in a fallback font because the declared font didn't load.",
-    why: "A fallback font changes the width of every line and the look of the brand, so a layout designed for the real font breaks. The rule reports each declared font family that the browser replaced with a fallback in any frame, with the first and last frame where that happened.",
+    why: "A fallback font changes the width of every line and the look of the brand, so a layout designed for the real font breaks. The rule reports each font family that was drawn in a fallback in any frame, with the first and last frame where that happened: a family declared with `@font-face` that didn't load, or a family that is neither declared nor installed on the machine rendering the film. A font stack that names another family that is available (`Helvetica, Arial, sans-serif`) chose its fallback on purpose and isn't reported.",
     fix: "Load the font before the frames render: call `loadFont()` from `@remotion/google-fonts`, or load a `FontFace` and pause rendering with `delayRender` until it has loaded.",
   },
   check({ film, report }) {
@@ -338,8 +383,32 @@ export const textOverlap = defineRule({
   },
 });
 
+export const duplicateTag = defineRule({
+  id: "continuity/duplicate-tag",
+  kind: "check",
+  severity: "error",
+  options: {},
+  docs: {
+    summary:
+      "No two elements on screen in the same frame carry the same `data-motion` tag.",
+    why: "A tag names one element, and findings and tests follow it from frame to frame by that name. When two elements carry the same tag at once, mographc can't tell which is which: measurements of one may be read as the other's, and a test of the tag checks whichever it finds. mographc keeps them apart as `tag`, `tag#2` and so on, matching each to where it was in the previous frame, and reports the tag with the frames where it is shared.",
+    fix: "Give each element its own tag, for example by adding an index or a name (`card:step-1`, `card:step-2`). If the two are one element shown twice during a transition, tag only the one the film is about.",
+  },
+  check({ film, report }) {
+    for (const [tag, frames] of film.duplicates)
+      for (const [a, b] of runs(frames, 1))
+        report({
+          element: film.elements.find((e) => e.id === tag),
+          frames: [a, b],
+          measured: `the tag "${tag}" is on ${film.rows(a).filter((r) => r.id === tag).length} elements at once for ${((b - a + 1) / film.fps).toFixed(2)} s`,
+          need: "each tag on at most one element at a time",
+        });
+  },
+});
+
 export const compilerRules = [
   jump,
+  duplicateTag,
   flicker,
   textCut,
   textOverlap,
