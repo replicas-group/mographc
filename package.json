@@ -1,6 +1,6 @@
 {
   "name": "mographc",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A compiler, linter and test framework for motion graphics made with Remotion",
   "keywords": [
     "remotion",
