@@ -72,6 +72,8 @@ npx mographc verify      # compiler, linter and your tests; exits 1 on any error
   ```
   For a time range in seconds, add `{ between: [9.5, 13], rules: { "staging/no-padding": "off" }, reason: "…" }` to `mographc.config.ts`.
 - `npx mographc elements` lists every element mographc sees, with ids, roles and times. Use it to decide what to tag, or to find out why a test can't find an element.
+- `npx mographc gaze <composition>` prints where the simulated viewer looks at each moment, why, and how many words of each text it has read. Run it whenever an `attention/` finding, `toBeRead` or `toBeTheFocus` surprises you, before changing the film: it shows what took the eye away.
+- `npx mographc activity <composition>` prints, second by second, how much of the film is changing and what changes, and lists the still stretches. Run it for `pace/activity` and `pace/dead-air` findings.
 
 ## 4. Write tests that record what you intended
 

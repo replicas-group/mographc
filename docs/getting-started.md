@@ -47,7 +47,7 @@ This makes `.agents/skills/mographc` a link to `node_modules/mographc/skills/mog
 | `mographc lint`  | ESLint     | Whether the motion follows the rules: how strongly each move slows down at the end for its length, whether a fast cursor stretches, where elements are placed and how much room they have, text size, how long things stay on screen, what the [simulated viewer](terms.md#reading) manages to read, and changes for the worse since the [baseline](baselines.md). | optional `mographc.config.ts` |
 | `mographc test`  | Vitest     | Whether the film does what you meant: the cursor clicks _Send_ at 4.2 s, the headline never overlaps the product window.                                                                                                                                                                                                                                           | `*.mographc.ts` files         |
 
-`mographc verify` runs all three. `mographc rules` lists every rule, and `mographc explain <rule>` prints what a rule checks, why it matters and how to fix a finding. `mographc help` lists every command and option.
+`mographc verify` runs all three. `mographc rules` lists every rule, and `mographc explain <rule>` prints what a rule checks, why it matters and how to fix a finding. `mographc help` lists every command and option, and `mographc <command> --help` prints one command's options.
 
 Every command takes composition ids to limit the run (`mographc lint Launch Teaser`), and these options:
 
@@ -59,8 +59,26 @@ Every command takes composition ids to limit the run (`mographc lint Launch Teas
 | `--json`           | Print findings as JSON, for scripts and agents.                                          |
 | `--warnings=false` | Print errors only.                                                                       |
 | `--no-cache`       | Capture the film again even if its sources haven't changed.                              |
+| `--during <a-b>`   | For `gaze` and `activity`: only print seconds a to b. The whole film is still measured.  |
 
-`mographc elements` lists every [element](terms.md#elements) mographc sees in the film, with its id, [role](terms.md#elements) and the times it's on screen. It's the quickest way to find what to tag, or to find out why a test can't find an element.
+`mographc elements` lists every [element](terms.md#elements) mographc sees in the film, with its id, [role](terms.md#elements) and the times it's on screen. It's the quickest way to find what to tag, or to find out why a test can't find an element. Untagged graphics and the parts of a cursor are left out unless you pass `--all`.
+
+Two commands show what the `attention/` and `pace/` rules are based on:
+
+- `mographc gaze <composition>` prints where the [simulated viewer](terms.md#reading) looks over time, why it looks there, and how many words of each text it has read, then lists every text it meets and how much of it was read before it left. Use it when `attention/unread-text`, `attention/competing`, `toBeRead` or `toBeTheFocus` reports something you don't expect:
+
+  ```
+  Chat  where the simulated viewer looks, reading 3.5 words a second
+    time           why      looks at                                                 read
+    1.80-2.60s     next     window:chat "Find out why the nightly build is fail…"    0 → 2.2 of 8 words
+    2.60-2.67s     pulled   surface 1102x300 at (409, 549)
+    2.67-4.40s     next     window:chat "Find out why the nightly build is fail…"    2.2 → 7.7 of 8 words
+    4.40-7.83s     next     text:answer "The nightly build fails because the ca…"    0 → 11.4 of 12 words
+  ```
+
+  `pulled` means something new appeared or moved and drew the eye, `next` that it went on to the next unread text, and `follows` that, with nothing to read, it follows what moves.
+
+- `mographc activity <composition>` prints, for each second, the share of frames where something is changing, where on the canvas the change is, and what changes, then lists the still stretches. Use it to find where the film is still when `pace/activity` or `pace/dead-air` reports it.
 
 In a terminal, output is coloured and wrapped to the window's width. When it's piped, colour and wrapping are off, so each finding stays on its own lines. Set `NO_COLOR` to turn colour off, or `FORCE_COLOR` to turn it on.
 

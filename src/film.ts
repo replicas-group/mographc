@@ -127,13 +127,40 @@ export class Element {
   at(frame: number) {
     return this.samples.get(frame);
   }
-  /** What it's called in a finding: its tag, or its text, or its kind and place. */
+  private name?: string;
+  /** What it's called in a finding: its tag, or its text, or its kind and place. Text is named at
+   * its fullest (a typed line by what it ends up saying), with the line it sits in when the line
+   * is longer, since a word set in its own span means little alone. */
   get label() {
     if (this.tagged) return this.id;
-    const s = this.samples.get(this.first)!;
-    if (s.raw.x) return `${this.role} "${s.raw.x.slice(0, 28)}"`;
+    if (this.name) return this.name;
+    let s = this.samples.get(this.first)!;
+    for (const x of this.samples.values())
+      if (x.raw.x && x.raw.x.length >= (s.raw.x?.length ?? 0)) s = x;
+    const clip = (t: string, n: number) =>
+      t.length > n ? `${t.slice(0, n - 1)}…` : t;
+    if (s.raw.x) {
+      const parent = s.raw.k.split("/").slice(0, -1).join("/");
+      const centre = s.box[1] + s.box[3] / 2;
+      const line = readText(
+        this.film
+          .rows(s.frame)
+          .filter(
+            (r) =>
+              r.t === "t" &&
+              r.o > 0.3 &&
+              r.k.split("/").slice(0, -1).join("/") === parent &&
+              Math.abs(r.b[1] + r.b[3] / 2 - centre) < s.box[3] / 2,
+          ),
+      );
+      const own = clip(s.raw.x, 30);
+      return (this.name =
+        line.length > s.raw.x.length + 1
+          ? `${this.role} "${own}" in "${clip(line, 40)}"`
+          : `${this.role} "${own}"`);
+    }
     const b = s.box;
-    return `${this.role} ${Math.round(b[2])}x${Math.round(b[3])} at (${Math.round(b[0])}, ${Math.round(b[1])})`;
+    return (this.name = `${this.role} ${Math.round(b[2])}x${Math.round(b[3])} at (${Math.round(b[0])}, ${Math.round(b[1])})`);
   }
   /** px moved from the previous frame, or 0 when it wasn't there. */
   step(frame: number) {
@@ -255,7 +282,15 @@ export interface Activity {
   drift?: { share: number; elements: Element[] };
   /** Elements that change substantially this frame. */
   moved: Set<Element>;
+  /** The outermost elements that change this frame (children carried by a changing parent aren't listed). */
+  changed: Element[];
+  /** Legible text appears or changes this frame (typed, streamed or replaced), however small it is.
+   * A number changing in place, such as a counter or a clock, isn't counted. */
+  text: boolean;
 }
+
+/** The text with every number replaced, so "Working for 3s" and "Working for 4s" are the same text. */
+export const shapeOf = (text: string) => text.replace(/\d+([.,:]\d+)*/g, "#");
 
 export interface Headline {
   /** Frames it's on screen, and the span where it's fully shown. */
@@ -546,7 +581,7 @@ export class Film {
       const under = el.frames.filter((f) =>
         (roots.get(f) ?? []).some((r) => isAncestor(r, el.at(f)!.raw.k)),
       );
-      if (under.length > el.frames.length / 2) el.role = "label";
+      if (under.length > el.frames.length / 2) el.role = "cursor-label";
     }
   }
 
@@ -564,7 +599,15 @@ export class Film {
     // a fade, new text, something arriving or leaving. A slow, steady move or zoom is drift: it
     // makes pixels change without giving the eye anything new, so it isn't activity.
     const fast = (45 * this.height) / 1080 / this.fps;
+    const legible = (10 * this.height) / 1080;
     for (const f of this.frames) {
+      let text = false;
+      const reads = (s: Sample) =>
+        s.raw.t === "t" &&
+        s.opacity > 0.3 &&
+        (s.raw.fs ?? 0) >= legible &&
+        /[A-Za-z0-9]/.test(s.raw.x ?? "") &&
+        area(s.visible) > 0;
       const changed: {
         key: string;
         boxes: Box[];
@@ -576,6 +619,7 @@ export class Film {
         const p = el.at(f - 1);
         if (!s && !p) continue;
         if (s && !p && f !== this.frames[0]) {
+          text ||= reads(s);
           if (s.opacity > 0.05)
             changed.push({
               key: s.raw.k,
@@ -611,6 +655,10 @@ export class Film {
           Math.abs(s.stretch - p.stretch) > 0.002;
         const fade = Math.abs(s.opacity - p.opacity);
         const retyped = s.raw.x !== p.raw.x;
+        text ||=
+          retyped &&
+          reads(s) &&
+          shapeOf(s.raw.x ?? "") !== shapeOf(p.raw.x ?? "");
         if (
           shift > fast ||
           resize > 0.006 ||
@@ -667,6 +715,8 @@ export class Film {
             ? { share: drift.share, elements: drift.elements }
             : undefined,
         moved: new Set(real.filter((c) => c.kind === "big").map((c) => c.el)),
+        changed: all.elements,
+        text,
       });
     }
     this.activityCache = out;

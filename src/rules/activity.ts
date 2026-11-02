@@ -9,6 +9,29 @@ import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
 import { runs, surfacesAt } from "./util.ts";
 
+/** Frames where at least `share` of the canvas changes, or legible text is typed or changes. */
+export const changing = (film: Film, share: number) => {
+  const act = film.activity();
+  // Text typed or streamed a few letters at a time reads as continuous change between its steps.
+  const hold = Math.round(film.fps / 5);
+  return film.frames.filter(
+    (f) =>
+      (act.get(f)?.share ?? 0) >= share ||
+      Array.from({ length: hold + 1 }, (_, k) => act.get(f - k)?.text).some(
+        Boolean,
+      ),
+  );
+};
+
+/** Stretches with nothing changing, longest first, as [first, last] frames. */
+export const stillSpans = (film: Film, share: number) => {
+  const moving = new Set(changing(film, share));
+  return runs(
+    film.frames.filter((f) => !moving.has(f)),
+    1,
+  ).sort((a, b) => b[1] - b[0] - (a[1] - a[0]));
+};
+
 /** Frames where at least `share` of the canvas changes. */
 const activeFrames = (film: Film, share: number, substantial = false) => {
   const act = film.activity();
@@ -25,8 +48,8 @@ export const activity = defineRule({
   options: { share: 0.01, warnBelow: 0.6, errorBelow: 0.45 },
   docs: {
     summary:
-      "On at least 60% of the film's frames, something changes over at least 1% of the canvas (a warning below 60%, an error below 45%).",
-    why: "When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. Slow, steady movement (see `camera/creep`) doesn't count.",
+      "On at least 60% of the film's frames, something changes over at least 1% of the canvas or text is typed or changes (a warning below 60%, an error below 45%).",
+    why: "When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear, or when legible text of any size appears or changes (typing, a streamed reply; text typed a few letters at a time counts as changing for 0.2 s after each step). A number changing in place, such as a counter, only counts when it covers 1% of the canvas, and slow, steady movement (see `camera/creep`) doesn't count. The finding lists the longest still stretches; `mographc activity` shows what changes in each second of the film.",
     fix: "Split long sections into shorter ones that each show one thing, bring elements in one at a time instead of showing them complete, and bring in the next element while the viewer reads text. A slow zoom or drift doesn't count as change.",
     options: {
       share:
@@ -38,11 +61,17 @@ export const activity = defineRule({
     },
   },
   check({ film, options, report }) {
-    const share = activeFrames(film, options.share).length / film.frames.length;
+    const share = changing(film, options.share).length / film.frames.length;
     if (share >= options.warnBelow) return;
+    const still = stillSpans(film, options.share)
+      .slice(0, 3)
+      .map(
+        ([a, b]) =>
+          `${(a / film.fps).toFixed(2)}-${((b + 1) / film.fps).toFixed(2)} s (${((b - a + 1) / film.fps).toFixed(1)} s)`,
+      );
     report({
       frames: [film.frames[0], film.frames[film.frames.length - 1]],
-      measured: `something changes over at least 1% of the canvas on only ${(share * 100).toFixed(0)}% of the frames`,
+      measured: `something changes over at least 1% of the canvas, or text is typed, on only ${(share * 100).toFixed(0)}% of the frames${still.length ? `; the longest still stretches are ${still.join(", ")}` : ""}`,
       need: `something changing on at least ${(options.warnBelow * 100).toFixed(0)}% of the frames`,
       severity: share < options.errorBelow ? "error" : "warn",
     });
@@ -56,8 +85,8 @@ export const deadAir = defineRule({
   options: { share: 0.01, warnAfter: 1.0, errorAfter: 2.0, endHold: 2.5 },
   docs: {
     summary:
-      "The film never goes more than 1.0 s without something changing over at least 1% of the canvas (an error after 2.0 s), except for a still ending of up to 2.5 s.",
-    why: "A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.",
+      "The film never goes more than 1.0 s without something changing over at least 1% of the canvas or text being typed or changing (an error after 2.0 s), except for a still ending of up to 2.5 s.",
+    why: "A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear, and when legible text of any size appears or changes (typing, a streamed reply; text typed a few letters at a time counts as changing for 0.2 s after each step). A number changing in place, such as a counter, only counts when it covers 1% of the canvas. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.",
     fix: "Add change to the still stretch (bring in the next element, reveal a detail, or animate part of what's shown), zoom toward the next thing that matters with an eased move, or start the next section sooner.",
     options: {
       share:
@@ -71,18 +100,16 @@ export const deadAir = defineRule({
     },
   },
   check({ film, options, report }) {
-    const act = film.activity();
-    const still = film.frames.filter(
-      (f) => (act.get(f)?.share ?? 0) < options.share,
-    );
     const last = film.frames[film.frames.length - 1];
-    for (const [a, b] of runs(still, 1)) {
+    for (const [a, b] of stillSpans(film, options.share).sort(
+      (x, y) => x[0] - y[0],
+    )) {
       const seconds = (b - a + 1) / film.fps;
       if (seconds <= options.warnAfter) continue;
       if (b >= last - 1 && seconds <= options.endHold) continue;
       report({
         frames: [a, b],
-        measured: `nothing changes over 1% or more of the canvas for ${seconds.toFixed(1)} s`,
+        measured: `nothing changes over 1% or more of the canvas, and no text is typed, for ${seconds.toFixed(1)} s`,
         need: `no more than ${options.warnAfter} s without change`,
         severity: seconds > options.errorAfter ? "error" : "warn",
       });

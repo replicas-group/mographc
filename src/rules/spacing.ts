@@ -126,7 +126,7 @@ export const unbalancedSpace = defineRule({
             (e) =>
               e.role !== "cursor" &&
               e.role !== "part" &&
-              e.role !== "label" &&
+              e.role !== "cursor-label" &&
               !mine.includes(e),
           )
           .map((e) => e.at(f))

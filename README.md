@@ -83,7 +83,7 @@ mographc has three tools, modelled on the ones commonly used for code:
 - `mographc lint` works like ESLint. It checks the film against rules about motion, such as how strongly moves slow down at the end, how long text stays on screen, where elements are placed, and whether text is large enough to read. It has a flat config file, presets, plugins, per-rule options, and suppressions written next to the code.
 - `mographc test` works like Vitest. Tests record what a particular film is meant to do, such as "the cursor clicks _Send_ at 4.2 s".
 
-`mographc verify` runs all three and exits with 1 if anything fails. mographc runs on Node 22.13 or later, needs no other setup, and uses the project's own copy of Remotion.
+`mographc verify` runs all three and exits with 1 if anything fails. `mographc gaze` and `mographc activity` show what the reading and pacing rules are based on: where the simulated viewer looks and what it reads over time, and where in the film nothing changes. mographc runs on Node 22.13 or later, needs no other setup, and uses the project's own copy of Remotion.
 
 ## Using mographc yourself
 

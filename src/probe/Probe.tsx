@@ -175,11 +175,17 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
       el.tagName === "IMG";
     if (!text && !paints && !tag) continue;
     // Text is measured by its glyphs: a flex row's box spans the full width even when its words don't.
+    // Spaces around the words aren't glyphs: leaving them out keeps the gap between words set in
+    // separate spans ("<span>error </span><span>continuity</span>"), so they read as two words.
     let measured: Box = [rect.left, rect.top, rect.width, rect.height];
-    const node = Array.from(el.childNodes).find((c) => c.nodeType === 3);
+    const node = Array.from(el.childNodes).find(
+      (c) => c.nodeType === 3 && c.textContent?.trim(),
+    );
     if (text && node) {
+      const content = node.textContent ?? "";
       const range = document.createRange();
-      range.selectNodeContents(node);
+      range.setStart(node, content.length - content.trimStart().length);
+      range.setEnd(node, content.trimEnd().length);
       const g = range.getBoundingClientRect();
       if (g.width * g.height > 0) measured = [g.left, g.top, g.width, g.height];
     }

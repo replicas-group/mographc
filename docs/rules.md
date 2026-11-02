@@ -241,9 +241,9 @@ A cursor never spends 0.1 s or longer over a background whose WCAG contrast rati
 
 Default: error.
 
-On at least 60% of the film's frames, something changes over at least 1% of the canvas (a warning below 60%, an error below 45%).
+On at least 60% of the film's frames, something changes over at least 1% of the canvas or text is typed or changes (a warning below 60%, an error below 45%).
 
-**Why:** When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. Slow, steady movement (see `camera/creep`) doesn't count.
+**Why:** When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear, or when legible text of any size appears or changes (typing, a streamed reply; text typed a few letters at a time counts as changing for 0.2 s after each step). A number changing in place, such as a counter, only counts when it covers 1% of the canvas, and slow, steady movement (see `camera/creep`) doesn't count. The finding lists the longest still stretches; `mographc activity` shows what changes in each second of the film.
 
 **Fix:** Split long sections into shorter ones that each show one thing, bring elements in one at a time instead of showing them complete, and bring in the next element while the viewer reads text. A slow zoom or drift doesn't count as change.
 
@@ -257,9 +257,9 @@ On at least 60% of the film's frames, something changes over at least 1% of the 
 
 Default: error.
 
-The film never goes more than 1.0 s without something changing over at least 1% of the canvas (an error after 2.0 s), except for a still ending of up to 2.5 s.
+The film never goes more than 1.0 s without something changing over at least 1% of the canvas or text being typed or changing (an error after 2.0 s), except for a still ending of up to 2.5 s.
 
-**Why:** A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.
+**Why:** A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear, and when legible text of any size appears or changes (typing, a streamed reply; text typed a few letters at a time counts as changing for 0.2 s after each step). A number changing in place, such as a counter, only counts when it covers 1% of the canvas. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.
 
 **Fix:** Add change to the still stretch (bring in the next element, reveal a detail, or animate part of what's shown), zoom toward the next thing that matters with an eased move, or start the next section sooner.
 

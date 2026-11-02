@@ -1,0 +1,21 @@
+{
+  "name": "mographc-viewer-fixtures",
+  "version": "1.0.0",
+  "description": "Small Remotion films that reproduce edge cases in the simulated viewer and the CLI output",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "remotion studio"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "mographc": "file:../..",
+    "typescript": "5.9.3"
+  }
+}

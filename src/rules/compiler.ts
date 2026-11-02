@@ -136,7 +136,7 @@ export const textCut = defineRule({
         report({
           element: el,
           frames: [a, b],
-          measured: `has ${Math.round((1 - area(s.visible) / area(s.box)) * 100)}% of the text "${(s.raw.x ?? "").slice(0, 30)}" cut off for ${(b - a + 1) / film.fps} s while it stays still`,
+          measured: `has ${Math.round((1 - area(s.visible) / area(s.box)) * 100)}% of the text "${(s.raw.x ?? "").slice(0, 30)}" cut off for ${((b - a + 1) / film.fps).toFixed(1)} s while it stays still`,
           need: "at least 85% of the text visible whenever it stays still for 0.5 s or longer",
         });
       }
