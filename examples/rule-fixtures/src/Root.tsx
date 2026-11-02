@@ -1,7 +1,9 @@
 import { Composition } from "remotion";
 import { BriefOverlap } from "./BriefOverlap";
+import { Collapse } from "./Collapse";
 import { CursorOnText } from "./CursorOnText";
 import { CutText } from "./CutText";
+import { Edge } from "./Edge";
 import { EmptySurface } from "./EmptySurface";
 import { SmallFocus } from "./SmallFocus";
 import { TightSpacing } from "./TightSpacing";
@@ -97,6 +99,24 @@ export const RemotionRoot: React.FC = () => (
       defaultProps={{ variant: "release" as const }}
       {...film}
       durationInFrames={150}
+    />
+    <Composition
+      id="SmallFocusCollapse"
+      component={Collapse}
+      {...film}
+      durationInFrames={240}
+    />
+    <Composition
+      id="SmallFocusEdge"
+      component={Edge}
+      defaultProps={{ linked: false }}
+      {...film}
+    />
+    <Composition
+      id="SmallFocusEdgeLinked"
+      component={Edge}
+      defaultProps={{ linked: true }}
+      {...film}
     />
     <Composition
       id="SmallFocusLinked"

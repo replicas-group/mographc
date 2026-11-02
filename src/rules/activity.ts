@@ -192,7 +192,7 @@ export const smallFocus = defineRule({
   docs: {
     summary:
       "The simulated viewer doesn't spend longer than 1.5 s reading or following one thing covering less than 5% of the canvas inside a surface covering 25% to 95% of it. When it does, the view should push in on that thing.",
-    why: "When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`) and counts only the time the eye needs to spend on the thing: for a line of text, the frames in which the viewer, reading 3.5 words a second, still has words of it left to read; for another element (cursors aside), the frames in which it changes. These don't count: looking on after a line is read; reading a line again that the viewer already read in full earlier (it scrolled away and came back); finishing a line after the camera pulls back from it (it was shown at least 1.5 times as tall earlier, so the film did push in on it); and text joined by a connector to another element, because pushing in would hide what it points to. A connector is a line drawn in an svg (of any size) with one end within 12 px at 1080p of the text's box, or of the small card the text sits in, and the other end at least 150 px at 1080p away from it, such as a leader line to a marker; a bar 6 px thick or less reaching as far counts too. The rule reports more than 1.5 s on the same thing while its box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas. The finding quotes the text and gives its words, so a line read together with the lines around it as one paragraph is easy to recognise.",
+    why: "When the moment that matters is one line in a large window (a request in a chat bubble, a status, a number), a wide shot leaves it small, and the rest of the canvas shows nothing the viewer needs while they read it. `staging/small-action` can't see this, because it measures the area that changes, and nothing changes while still text is read. This rule follows the simulated viewer (see `docs/terms.md`) and counts only the time the eye needs to spend on the thing: for a line of text, the frames in which the viewer, reading 3.5 words a second, still has words of it left to read; for another element (cursors aside), the frames in which it changes. These don't count: looking on after a line is read; reading again what the viewer already read of a text when the same text comes back into view (it scrolled away, or a list above it collapsed); finishing a line after the camera pulls back from it (it was shown at least 1.5 times as tall earlier, so the film did push in on it); and text joined by a connector to another element, because pushing in would hide what it points to. A connector is a line drawn in an svg (of any size), such as a leader line to a marker, with one end within 12 px at 1080p of the text's box, or of the small card the text sits in, and the other end at least 150 px at 1080p away from it; or a line that leaves a surface the text is in from the edge beside the text, with one end within 12 px of that edge and level with the text (within a font size above or below it, or beside it for a top or bottom edge), and the other end outside the surface and at least 150 px away; a bar 6 px thick or less reaching as far counts too. The rule reports more than 1.5 s on the same thing while its box covers less than 5% of the canvas and its centre lies inside a visible surface (a window, card or panel) covering 25% to 95% of the canvas. The finding quotes the text and gives its words, so a line read together with the lines around it as one paragraph is easy to recognise.",
     fix: "Push in on the thing being looked at: scale the film's content up about it with an eased move, so it covers well over 5% of the canvas, then pull back when the eye has to move on. Cropping to the part of the surface around it works too. Don't accept this finding as a pause for reading: the pause is fine, the framing is what is wrong.",
     options: {
       focus:
@@ -208,9 +208,11 @@ export const smallFocus = defineRule({
     const act = film.activity();
     const near = px(film, 12);
     const reach = px(film, 150);
-    // How far the viewer has read each line, and which line it first read each text in full in.
+    // How far the viewer has read each line; the share of each text it has read, over every time
+    // that text was on screen; and that share when each line was first looked at.
     const progress = new Map<Read, number>();
-    const read = new Map<string, Read>();
+    const share = new Map<string, number>();
+    const prior = new Map<Read, number>();
     /** The film already pushed in on the line: earlier it was shown at least 1.5 times as tall. */
     const pushedIn = (r: Read, f: number, box: Box) => {
       for (const [k, b] of r.boxes) {
@@ -247,6 +249,31 @@ export const smallFocus = defineRule({
           Math.max(anchor[1] - y, 0, y - anchor[1] - anchor[3]),
         );
       const touches = (x: number, y: number) => away(x, y) <= near;
+      // Or a line that leaves a surface the text is in from the edge beside the text: its near end
+      // on that edge, level with the text (within a font size), and its far end outside the surface.
+      const surfaces = rows
+        .filter((x) => x.t === "b" && keys.some((k) => isAncestor(x.k, k)))
+        .map((x) => x.v);
+      const inside = (b: Box, x: number, y: number) =>
+        x > b[0] && x < b[0] + b[2] && y > b[1] && y < b[1] + b[3];
+      const leaves = (x0: number, y0: number, x1: number, y1: number) =>
+        surfaces.some((b) => {
+          const onSide =
+            (Math.abs(x0 - b[0]) <= near ||
+              Math.abs(x0 - b[0] - b[2]) <= near) &&
+            y0 >= box[1] - r.size &&
+            y0 <= box[1] + box[3] + r.size;
+          const onTopOrBottom =
+            (Math.abs(y0 - b[1]) <= near ||
+              Math.abs(y0 - b[1] - b[3]) <= near) &&
+            x0 >= box[0] - r.size &&
+            x0 <= box[0] + box[2] + r.size;
+          return (
+            (onSide || onTopOrBottom) &&
+            !inside(b, x1, y1) &&
+            Math.hypot(x1 - x0, y1 - y0) >= reach
+          );
+        });
       return rows.some((x) => {
         if (
           x.o < 0.3 ||
@@ -259,7 +286,9 @@ export const smallFocus = defineRule({
           return x.sk.some(
             ([x0, y0, x1, y1]) =>
               (touches(x0, y0) && away(x1, y1) >= reach) ||
-              (touches(x1, y1) && away(x0, y0) >= reach),
+              (touches(x1, y1) && away(x0, y0) >= reach) ||
+              leaves(x0, y0, x1, y1) ||
+              leaves(x1, y1, x0, y0),
           );
         // A thin bar from the text reaching away.
         const b = x.v;
@@ -291,9 +320,12 @@ export const smallFocus = defineRule({
         const now = g.progress?.read ?? before;
         const words = g.progress?.words ?? r.words;
         progress.set(r, now);
-        // Looking on after reading it, or reading it again when it comes back, shows nothing new.
-        if (before >= words - 0.25 || (read.get(text(r)) ?? r) !== r) continue;
-        if (now >= words - 0.25) read.set(text(r), r);
+        // Text that scrolled away and came back is the same text: what was read of it still counts.
+        if (!prior.has(r)) prior.set(r, share.get(text(r)) ?? 0);
+        const readBy = (x: number) => Math.min(1, prior.get(r)! + x / words);
+        share.set(text(r), Math.max(share.get(text(r)) ?? 0, readBy(now)));
+        // Looking on after reading it, or reading it again, shows nothing new.
+        if (readBy(before) * words >= words - 0.25) continue;
         box = r.boxes.get(f);
         if (!box || pushedIn(r, f, box) || linked(r, f, box)) continue;
       } else if (

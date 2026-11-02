@@ -17,12 +17,14 @@ const cases: [rule: string, broken: string[], fixed: string[]][] = [
   ["staging/empty-surface", ["EmptySurface"], ["EmptySurfaceFixed"]],
   [
     "staging/small-focus",
-    ["SmallFocus"],
+    ["SmallFocus", "SmallFocusEdge"],
     [
       "SmallFocusFixed",
       "SmallFocusReread",
       "SmallFocusLinger",
       "SmallFocusRelease",
+      "SmallFocusCollapse",
+      "SmallFocusEdgeLinked",
       "SmallFocusLinked",
     ],
   ],
