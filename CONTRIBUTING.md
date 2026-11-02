@@ -34,3 +34,10 @@ Run `npm run build` at the repository root after each change to `src/`, because 
 
 - Use [Conventional Commits](https://www.conventionalcommits.org) for the title (`feat:`, `fix:`, `docs:` and so on).
 - CI runs the type check, ESLint, and the demo film on Node 22.13, 24 and 26. Run `npm run check` before opening the pull request.
+
+## Releasing
+
+1. Bump `version` in `package.json` (and `package-lock.json`) in a pull request, and merge it.
+2. Publish a GitHub release from `main` with the tag `v<version>`, for example `v0.2.0`.
+
+The [release workflow](.github/workflows/release.yml) runs CI, checks that the tag matches `package.json`, and publishes to npm with [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is stored in the repository. npm adds [provenance](https://docs.npmjs.com/generating-provenance-statements) automatically when the repository is public.
