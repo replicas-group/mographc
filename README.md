@@ -6,13 +6,14 @@ mographc is designed to be used by coding agents. You install it with its agent 
 
 ## Using mographc with a coding agent
 
-In a Remotion project, install mographc and copy its skill to where your agent reads skills. For Claude Code that is `.claude/skills/`; many other agents read `.agents/skills/`.
+In a Remotion project, install mographc and add its agent skill with the [skills](https://skills.sh) CLI:
 
 ```bash
 npm i -D mographc
-mkdir -p .claude/skills
-cp -r node_modules/mographc/skills/mographc .claude/skills/
+npx skills add replicas-group/mographc -a universal -a claude-code -y
 ```
+
+The second command puts the skill in `.agents/skills/mographc`, which Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode and most other coding agents read. Claude Code reads `.claude/skills/` instead, so `-a claude-code` also adds a link there that points to the same files. Commit both folders and `skills-lock.json` so everyone working on the project gets the skill. [Getting started](docs/getting-started.md#installing-the-agent-skill) covers other ways to install it.
 
 The skill teaches the agent how to plan a film, run mographc, write tests and rules, and fix what mographc reports. Then ask for what you want, for example:
 

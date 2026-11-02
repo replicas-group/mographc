@@ -18,6 +18,27 @@ You don't need any other setup, because mographc bundles the project with its ow
 
 mographc uses the project's own copy of Remotion rather than bringing its own, so there is only one version of Remotion in the project and it always matches.
 
+## Installing the agent skill
+
+mographc includes an agent skill in `skills/mographc/`. It teaches a coding agent how to plan a film, run mographc, write tests and rules, and fix what mographc reports. The [skills](https://skills.sh) CLI installs it:
+
+```bash
+npx skills add replicas-group/mographc -a universal -a claude-code -y
+```
+
+- `-a universal` installs the skill in `.agents/skills/mographc`. Most coding agents read skills from `.agents/skills/`, including Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode, Amp and Cline.
+- `-a claude-code` adds `.claude/skills/mographc`, because Claude Code reads skills from `.claude/skills/` only. The CLI makes it a symbolic link to the copy in `.agents/skills/`, so there is one copy of the files. Add `--copy` if your system doesn't support symbolic links.
+- `-y` skips the CLI's questions. Without it, the CLI asks which agents to install for.
+- The CLI records the source in `skills-lock.json`. `npx skills update` updates the skill later.
+
+`npx skills add` takes the skill from the repository's default branch, so it can be newer than the version of mographc you installed. To use the skill that ships inside the installed package instead, link it from `node_modules` with the CLI's sync command (marked experimental in the skills CLI):
+
+```bash
+npx skills experimental_sync -a universal -a claude-code -y
+```
+
+This makes `.agents/skills/mographc` a link to `node_modules/mographc/skills/mographc`, so the skill updates whenever you update mographc.
+
 ## The commands
 
 | Command          | Similar to | What it checks                                                                                                                                                                      | Setup                         |
