@@ -10,3 +10,6 @@ renders/
 .remotion/
 .cache/
 .mographc/
+
+# The repository keeps one lockfile, at the root. Examples resolve their dependencies on install.
+examples/*/package-lock.json
