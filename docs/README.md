@@ -7,6 +7,7 @@
 - [Writing tests](writing-tests.md): test files, `loadFilm` and every matcher.
 - [Baselines](baselines.md): saving a film's measurements when a person approves it, and comparing later versions with them.
 - [How it works](how-it-works.md): how mographc measures a film.
+- [The simulated viewer](simulated-viewer.md): how mographc estimates where the viewer looks and what they read, with the numbers it uses.
 - [Rules reference](rules.md): every built-in rule, generated from the rules' own docs.
 
 The [agent skill](../skills/mographc/SKILL.md) covers making a film with mographc from start to finish, including guidance on the story, framing, and where the viewer looks.
