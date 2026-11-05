@@ -11,7 +11,7 @@ import {
 } from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
-import { frames as framesIn, px, runs, surfacesAt } from "./util.ts";
+import { carried, frames as framesIn, px, runs, surfacesAt } from "./util.ts";
 
 export const titleOffCentre = defineRule({
   id: "staging/title-off-centre",
@@ -648,6 +648,60 @@ export const popOut = defineRule({
   },
 });
 
+export const landsNowhere = defineRule({
+  id: "staging/lands-nowhere",
+  kind: "lint",
+  severity: "error",
+  options: { travel: 300, size: 40, after: 0.2 },
+  docs: {
+    summary:
+      "An element that travels at least 300 px at 1080p across the canvas comes to rest visibly at the end of its move, staying above 30% opacity for at least 0.2 s, unless it leaves the canvas.",
+    why: "A thing that flies somewhere and fades out or vanishes on the way, while still on the canvas, reads as going into nowhere: the viewer follows it and is left looking at an empty spot, or at the space behind or below another element, with no idea where it went. A move that delivers something (a screenshot into a composer, a file into a folder) must visibly arrive. The rule looks at each move of an element at least as large as a 40 × 40 px square at 1080p. It reports a move of at least 300 px at 1080p when the element is gone (below 30% opacity, or removed) within 0.2 s of the move's end while the centre of its last visible frame is still on the canvas. It skips cursors, elements carried by a moving container (that container is checked instead), and frames where more than half of the visible elements disappear together, which is a change of scene.",
+    fix: "Let the element land: ease it into a visible destination and hold it there (an attachment slot, a list row, a chip), or turn it into that destination's new state (a thumbnail, a count badge) that stays. Or drop the flight and show only the destination changing. If it is an exit, move it off the canvas instead of fading it out mid-screen.",
+    options: {
+      travel:
+        "The shortest move, in px at 1080p along the element's path, that is checked.",
+      size: "The side, in px at 1080p, of the smallest square whose area an element must cover at the start of its move to be checked.",
+      after:
+        "How long, in seconds, the element must stay above 30% opacity after its move ends.",
+    },
+  },
+  check({ film, options, report }) {
+    const end = film.frames[film.frames.length - 1];
+    const hold = framesIn(film, options.after);
+    const shown = (f: number) =>
+      film.elements.filter((e) => (e.at(f)?.opacity ?? 0) > 0.3);
+    const isCut = (f: number) => {
+      const before = shown(f);
+      return (
+        before.filter((e) => (e.at(f + 1)?.opacity ?? 0) <= 0.3).length >
+        0.5 * before.length
+      );
+    };
+    for (const el of film.elements) {
+      if (el.role === "cursor" || el.role === "part") continue;
+      for (const m of el.moves()) {
+        if (m.distance < px(film, options.travel)) continue;
+        const start = el.at(m.from)!;
+        if (area(start.visible) < px(film, options.size) ** 2) continue;
+        // The last frame it's visible, from the move's start on.
+        let gone = m.from;
+        while (gone <= end && (el.at(gone + 1)?.opacity ?? 0) > 0.3) gone += 1;
+        if (gone >= end || gone > m.to + hold) continue;
+        const last = el.at(gone)!;
+        if (!film.onCanvas(last) || area(last.visible) === 0) continue;
+        if (carried(film, gone, last.raw.k) || isCut(gone)) continue;
+        report({
+          element: el,
+          frames: [m.from, gone],
+          measured: `travels ${Math.round(m.distance)} px and ${gone < m.to ? "disappears before its move ends" : `is gone ${((gone - m.to) / film.fps).toFixed(2)} s after its move ends`}, at (${Math.round(last.box[0] + last.box[2] / 2)}, ${Math.round(last.box[1] + last.box[3] / 2)}) on the canvas, without landing anywhere visible`,
+          need: `a move that ends with the element at rest and visible for at least ${options.after} s, or that leaves the canvas`,
+        });
+      }
+    }
+  },
+});
+
 export const stagingRules = [
   titleOffCentre,
   noPadding,
@@ -660,4 +714,5 @@ export const stagingRules = [
   fadeOnly,
   popIn,
   popOut,
+  landsNowhere,
 ];
