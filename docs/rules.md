@@ -406,6 +406,22 @@ No headline starts in the top 19% of the canvas height while also being wider th
 
 **Fix:** Place the headline in its own area beside or around the main element on screen, or break it onto more lines so it is narrower than 47% of the canvas.
 
+### `staging/lands-nowhere`
+
+Default: error.
+
+An element that travels at least 300 px at 1080p across the canvas comes to rest visibly at the end of its move, staying above 30% opacity for at least 0.2 s, unless it leaves the canvas.
+
+**Why:** A thing that flies somewhere and fades out or vanishes on the way, while still on the canvas, reads as going into nowhere: the viewer follows it and is left looking at an empty spot, or at the space behind or below another element, with no idea where it went. A move that delivers something (a screenshot into a composer, a file into a folder) must visibly arrive. The rule looks at each move of an element at least as large as a 40 × 40 px square at 1080p. It reports a move of at least 300 px at 1080p when the element is gone (below 30% opacity, or removed) within 0.2 s of the move's end while the centre of its last visible frame is still on the canvas. It skips cursors, elements carried by a moving container (that container is checked instead), and frames where more than half of the visible elements disappear together, which is a change of scene.
+
+**Fix:** Let the element land: ease it into a visible destination and hold it there (an attachment slot, a list row, a chip), or turn it into that destination's new state (a thumbnail, a count badge) that stays. Or drop the flight and show only the destination changing. If it is an exit, move it off the canvas instead of fading it out mid-screen.
+
+| Option   | Default | What it controls                                                                                                          |
+| -------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `travel` | `300`   | The shortest move, in px at 1080p along the element's path, that is checked.                                              |
+| `size`   | `40`    | The side, in px at 1080p, of the smallest square whose area an element must cover at the start of its move to be checked. |
+| `after`  | `0.2`   | How long, in seconds, the element must stay above 30% opacity after its move ends.                                        |
+
 ## camera
 
 ### `camera/creep`
