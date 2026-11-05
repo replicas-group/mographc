@@ -343,6 +343,22 @@ When the canvas shows only text and graphics (no surface or button), the centre 
 | `tolerance` | `16`    | How far, in px at 1080p, the group's centre may be from the canvas centre horizontally. |
 | `vertical`  | `64`    | How far, in px at 1080p, the group's centre may be from the canvas centre vertically.   |
 
+### `staging/empty-frame`
+
+Default: error.
+
+While a surface (a window, card or panel) covering at least 3% of the canvas is standing still, the box around everything on screen covers at least 40% of the canvas and leaves no empty margin wider than 30% of the canvas's width (left or right) or height (top or bottom), for 1 s or longer.
+
+**Why:** A small window floating in a big empty canvas wastes the screen: the product is too small to read on a phone, and the empty space reads as unfinished rather than as a choice. A film fills the frame with its subject. The rule takes the bounding box of every element above 30% opacity except cursors and anything covering 90% of the canvas or more (a background), on frames where a surface covering at least 3% of the canvas is visible and still. It reports a stretch of at least 1 s where that box covers less of the canvas than `cover`, or where the gap between it and any canvas edge is wider than `margin` of the canvas in that direction. Frames with only text and graphics, such as a title or an end card, aren't checked.
+
+**Fix:** Scale the product up until it dominates the frame, and place the caption tight beside it, so together they span most of the canvas. Centre the group in the space, and push in on the part that matters rather than showing a small whole window. The finding gives how much of the canvas the content covers and its widest empty margin.
+
+| Option    | Default | What it controls                                                                                                                     |
+| --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `cover`   | `0.4`   | The smallest share of the canvas, from 0 to 1, that the box around everything on screen may cover.                                   |
+| `margin`  | `0.3`   | The widest empty gap between that box and a canvas edge, as a share of the canvas width (left and right) or height (top and bottom). |
+| `seconds` | `1`     | How long, in seconds, the frame must stay too empty before it's reported.                                                            |
+
 ### `staging/no-padding`
 
 Default: error.

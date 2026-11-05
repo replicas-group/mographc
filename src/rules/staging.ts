@@ -7,11 +7,12 @@ import {
   intersect,
   intersectArea,
   isAncestor,
+  union,
   type Element,
 } from "../film.ts";
 import { defineRule } from "../rule.ts";
 import type { Box } from "../types.ts";
-import { frames as framesIn, px, runs, surfacesAt } from "./util.ts";
+import { frames as framesIn, movingAt, px, runs, surfacesAt } from "./util.ts";
 
 export const titleOffCentre = defineRule({
   id: "staging/title-off-centre",
@@ -648,8 +649,80 @@ export const popOut = defineRule({
   },
 });
 
+export const emptyFrame = defineRule({
+  id: "staging/empty-frame",
+  kind: "lint",
+  severity: "error",
+  options: { cover: 0.4, margin: 0.3, seconds: 1 },
+  docs: {
+    summary:
+      "While a surface (a window, card or panel) covering at least 3% of the canvas is standing still, the box around everything on screen covers at least 40% of the canvas and leaves no empty margin wider than 30% of the canvas's width (left or right) or height (top or bottom), for 1 s or longer.",
+    why: "A small window floating in a big empty canvas wastes the screen: the product is too small to read on a phone, and the empty space reads as unfinished rather than as a choice. A film fills the frame with its subject. The rule takes the bounding box of every element above 30% opacity except cursors and anything covering 90% of the canvas or more (a background), on frames where a surface covering at least 3% of the canvas is visible and still. It reports a stretch of at least 1 s where that box covers less of the canvas than `cover`, or where the gap between it and any canvas edge is wider than `margin` of the canvas in that direction. Frames with only text and graphics, such as a title or an end card, aren't checked.",
+    fix: "Scale the product up until it dominates the frame, and place the caption tight beside it, so together they span most of the canvas. Centre the group in the space, and push in on the part that matters rather than showing a small whole window. The finding gives how much of the canvas the content covers and its widest empty margin.",
+    options: {
+      cover:
+        "The smallest share of the canvas, from 0 to 1, that the box around everything on screen may cover.",
+      margin:
+        "The widest empty gap between that box and a canvas edge, as a share of the canvas width (left and right) or height (top and bottom).",
+      seconds:
+        "How long, in seconds, the frame must stay too empty before it's reported.",
+    },
+  },
+  check({ film, options, report }) {
+    const bad: [number, number, string][] = [];
+    for (const f of film.frames) {
+      const surfaces = film.elements.filter((e) => {
+        const s = e.role === "surface" ? e.at(f) : undefined;
+        return (
+          s &&
+          s.opacity > 0.3 &&
+          area(s.visible) >= 0.03 * film.area &&
+          area(s.visible) < 0.9 * film.area
+        );
+      });
+      if (!surfaces.length || surfaces.some((e) => movingAt(e, f))) continue;
+      const boxes = film.elements
+        .filter((e) => e.role !== "cursor")
+        .map((e) => e.at(f))
+        .filter(
+          (s) =>
+            s &&
+            s.opacity > 0.3 &&
+            area(s.visible) > 0 &&
+            area(s.visible) < 0.9 * film.area,
+        )
+        .map((s) => s!.visible);
+      const [x, y, w, h] = union(boxes);
+      const gaps: [string, number][] = [
+        ["left", x / film.width],
+        ["right", (film.width - x - w) / film.width],
+        ["top", y / film.height],
+        ["bottom", (film.height - y - h) / film.height],
+      ];
+      const [side, gap] = gaps.sort((a, b) => b[1] - a[1])[0];
+      const cover = (w * h) / film.area;
+      if (cover < options.cover || gap > options.margin)
+        bad.push([f, cover, `${side} ${(gap * 100).toFixed(0)}%`]);
+    }
+    for (const [a, b] of runs(
+      bad.map((x) => x[0]),
+      1,
+    )) {
+      if (b - a + 1 < framesIn(film, options.seconds)) continue;
+      const mid = bad.filter((x) => x[0] >= a && x[0] <= b);
+      const [, cover, gap] = mid[Math.floor(mid.length / 2)];
+      report({
+        frames: [a, b],
+        measured: `everything on screen fits in a box covering ${(cover * 100).toFixed(0)}% of the canvas, with its widest empty margin on the ${gap.replace(" ", " (")} of the canvas)`,
+        need: `the content covering at least ${(options.cover * 100).toFixed(0)}% of the canvas, with no empty margin wider than ${(options.margin * 100).toFixed(0)}% of the canvas`,
+      });
+    }
+  },
+});
+
 export const stagingRules = [
   titleOffCentre,
+  emptyFrame,
   noPadding,
   textTooSmall,
   textOverProduct,
