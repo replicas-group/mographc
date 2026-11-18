@@ -1,4 +1,5 @@
 import type { Element, Film } from "./film.ts";
+import type { Rendered } from "./render.ts";
 
 export type Severity = "error" | "warn" | "off";
 
@@ -23,6 +24,8 @@ export interface Rule<Options extends object = Record<string, unknown>> {
   options: Options;
   /** Needs a baseline to compare against. */
   needsBaseline?: boolean;
+  /** Reads the rendered picture and sound (`context.rendered`). Such rules also run on a video file on its own, where the film has no elements. */
+  needsRender?: boolean;
   check(context: RuleContext<Options>): void;
 }
 
@@ -43,6 +46,8 @@ export interface RuleContext<Options> {
   options: Options;
   /** The baseline film (the saved measurements it is compared with), when the rule needs one and a baseline exists. */
   baseline?: Film;
+  /** The rendered film's picture and sound, for rules with `needsRender`. */
+  rendered?: Rendered;
   report(finding: Report): void;
 }
 

@@ -92,5 +92,20 @@ export const format = (
     "",
     `${errors ? bold(red(`${errors} error${errors === 1 ? "" : "s"}`)) : green("0 errors")}, ${warns ? yellow(warnText) : warnText}${ok ? `, ${ok} accepted` : ""}`,
   );
+  // Every reason a finding was accepted, so whoever reads the summary sees what was waved through and why.
+  const reasons = new Map<string, number>();
+  for (const f of findings.filter((x) => x.accepted)) {
+    const key = `${f.rule}: ${f.accepted}`;
+    reasons.set(key, (reasons.get(key) ?? 0) + 1);
+  }
+  if (reasons.size) {
+    lines.push(`Accepted (${reasons.size} decisions):`);
+    for (const [key, n] of reasons)
+      lines.push(
+        ...wrap(`${key}${n > 1 ? ` (${n} findings)` : ""}`, 4, columns).map(
+          (l, i) => `${i ? "    " : "  - "}${l}`,
+        ),
+      );
+  }
   return lines.join("\n");
 };

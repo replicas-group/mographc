@@ -1,12 +1,20 @@
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
+import {
+  AbsoluteFill,
+  Audio,
+  Easing,
+  interpolate,
+  staticFile,
+  useCurrentFrame,
+} from "remotion";
 
 // The moments the film is built around, in frames at 30 fps. The tests use the same times.
 export const TIMES = {
-  typed: 94,
-  click: 100,
-  leave: 108,
-  reply: 118,
-  checks: 134,
+  landed: 56,
+  typed: 110,
+  click: 116,
+  leave: 124,
+  reply: 134,
+  checks: 150,
 };
 
 const CURVE = {
@@ -130,13 +138,15 @@ const Bubble: React.FC<{
   </div>
 );
 
-// The camera pushes in on the composer while the prompt is typed, then pulls back for the reply.
+// The camera eases in on the window as the score rises, settles as the window lands on the hit and
+// holds; then it pushes in on the composer while the prompt is typed, and pulls back for the reply.
 const SHOTS = [
-  { at: 0, x: 960, y: 540, scale: 1 },
-  { at: 60, x: 960, y: 540, scale: 1 },
-  { at: 80, x: WINDOW.x + 520, y: SEND.y + 40, scale: 1.6 },
-  { at: 104, x: WINDOW.x + 520, y: SEND.y + 40, scale: 1.6 },
-  { at: 126, x: WINDOW.x + 520, y: 540, scale: 1 },
+  { at: 0, x: 960, y: 540, scale: 0.88 },
+  { at: TIMES.landed, x: 960, y: 540, scale: 1 },
+  { at: 76, x: 960, y: 540, scale: 1 },
+  { at: 96, x: WINDOW.x + 520, y: SEND.y + 40, scale: 1.6 },
+  { at: 120, x: WINDOW.x + 520, y: SEND.y + 40, scale: 1.6 },
+  { at: 142, x: WINDOW.x + 520, y: 540, scale: 1 },
 ];
 const camera = (frame: number) => {
   let { x, y, scale } = SHOTS[0];
@@ -160,11 +170,11 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
 
   // The headline is read on its own and leaves as the window arrives.
   const headlineIn = tween(frame, 0, 20, 0, 1, CURVE.arrive);
-  const headlineOut = tween(frame, 30, 42, 0, 1, CURVE.leave);
-  const windowIn = tween(frame, 40, 58, 0, 1, CURVE.move);
+  const headlineOut = tween(frame, 33, 40, 0, 1, CURVE.leave);
+  const windowIn = tween(frame, 41, TIMES.landed, 0, 1, CURVE.arrive);
   const typed = PROMPT.slice(
     0,
-    Math.floor(tween(frame, 78, TIMES.typed, 0, PROMPT.length, Easing.linear)),
+    Math.floor(tween(frame, 94, TIMES.typed, 0, PROMPT.length, Easing.linear)),
   );
   const sent = frame >= TIMES.click;
   const inputOut = tween(frame, TIMES.click, TIMES.click + 8, 1, 0);
@@ -200,12 +210,12 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
   // Bug 2: the cursor clicks to the left of the button.
   const target = { x: send.x - (broken ? 360 : 0), y: send.y };
   const keys: Key[] = [
-    { at: 70, x: 2000, y: 1180 },
+    { at: 86, x: 2000, y: 1180 },
     // Bug 1: half way there, the cursor jumps 300 px in one frame.
     ...(broken
       ? [
-          { at: 84, x: 1960, y: 1120 },
-          { at: 85, x: 1700, y: 980 },
+          { at: 100, x: 1960, y: 1120 },
+          { at: 101, x: 1700, y: 980 },
         ]
       : []),
     { at: TIMES.click, x: target.x, y: target.y },
@@ -215,7 +225,9 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
   ];
 
   return (
-    <AbsoluteFill style={{ background: "#F6F7F9", fontFamily: FONT }}>
+    <AbsoluteFill style={{ background: "#15181D", fontFamily: FONT }}>
+      {/* A riser under the push in, and a hit as the window lands. */}
+      <Audio src={staticFile("score.wav")} />
       <AbsoluteFill
         style={{
           transform: `translate(${960 - cam.x * cam.scale}px, ${540 - cam.y * cam.scale}px) scale(${cam.scale})`,
@@ -223,9 +235,21 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
         }}
       >
         <div
+          data-motion="backdrop:stage"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 50%, #232833 0%, #15181D 60%)",
+            height: 1080,
+            left: 0,
+            position: "absolute",
+            top: 0,
+            width: 1920,
+          }}
+        />
+        <div
           data-motion="headline:claim"
           style={{
-            color: "#111111",
+            color: "#F4F5F7",
             fontSize: 88,
             fontWeight: 500,
             left: 0,
@@ -242,6 +266,7 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
         </div>
         <div
           data-motion="window:chat"
+          data-motion-reveal
           style={{
             background: "#FFFFFF",
             border: "1px solid #D8DCE2",
@@ -252,7 +277,7 @@ export const Demo: React.FC<{ broken: boolean }> = ({ broken }) => {
             overflow: "hidden",
             position: "absolute",
             top: WINDOW.y,
-            transform: `translateX(${(1 - windowIn) * 240}px)`,
+            transform: `translateX(${(1 - windowIn) * 240}px) scale(${0.9 + 0.1 * windowIn})`,
             width: WINDOW.w,
           }}
         >

@@ -97,6 +97,20 @@ All text is drawn in the font its CSS declares, never in a fallback font because
 
 **Fix:** Load the font before the frames render: call `loadFont()` from `@remotion/google-fonts`, or load a `FontFace` and pause rendering with `delayRender` until it has loaded.
 
+### `assets/cutout-fragments`
+
+Default: error.
+
+A cut-out image (one with transparency) shown over at least 1% of the canvas is one piece: none of its opaque parts are detached from the largest one and end in a straight cut.
+
+**Why:** When a photo is cut out by a background remover, parts of the subject that were overlapped or touched the edge (fingertips around a phone, hair over a shoulder) come out as separate islands with flat, chopped edges. Composited over the film they float next to the subject and look broken. It is measured on the image's own transparency, once per image: the opaque pieces apart from the largest (each at least 0.2% of its opaque area), and whether a piece has a straight edge at least 6% of the image's size long along a row or column inside the image.
+
+**Fix:** Fix the matte, not the film: cut the image out again with a better mask, paint the detached pieces back onto the subject or delete them, or crop or cover the part where they are so they're never on screen.
+
+| Option | Default | What it controls                                                                  |
+| ------ | ------- | --------------------------------------------------------------------------------- |
+| `area` | `0.01`  | The smallest share of the canvas (0.01 is 1%) the image must cover to be checked. |
+
 ## easing
 
 ### `easing/linear`
@@ -241,38 +255,38 @@ A cursor never spends 0.1 s or longer over a background whose WCAG contrast rati
 
 Default: error.
 
-On at least 60% of the film's frames, something changes over at least 1% of the canvas (a warning below 60%, an error below 45%).
+On at least 60% of the film's frames, something changes over at least 1% of the canvas.
 
 **Why:** When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. Slow, steady movement (see `camera/creep`) doesn't count.
 
 **Fix:** Split long sections into shorter ones that each show one thing, bring elements in one at a time instead of showing them complete, and bring in the next element while the viewer reads text. A slow zoom or drift doesn't count as change.
 
-| Option       | Default | What it controls                                                                                |
-| ------------ | ------- | ----------------------------------------------------------------------------------------------- |
-| `share`      | `0.01`  | The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing. |
-| `warnBelow`  | `0.6`   | The share of frames (0.6 is 60%) that must be changing; below it the rule reports a warning.    |
-| `errorBelow` | `0.45`  | The share of changing frames below which the finding is an error instead of a warning.          |
+| Option       | Default | What it controls                                                                                                                                                                  |
+| ------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `share`      | `0.01`  | The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing.                                                                                   |
+| `warnBelow`  | `0.6`   | The share of frames (0.6 is 60%) that must be changing; below it the rule reports a finding.                                                                                      |
+| `errorBelow` | `0.6`   | The share of changing frames below which the finding is an error; between it and warnBelow it is a warning. By default they're the same, so a film that is still too often fails. |
 
 ### `pace/dead-air`
 
 Default: error.
 
-The film never goes more than 1.0 s without something changing over at least 1% of the canvas (an error after 2.0 s), except for a still ending of up to 2.5 s.
+The film never goes more than 1.0 s without something changing over at least 1% of the canvas, except for a still ending of up to 2.5 s.
 
 **Why:** A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.
 
 **Fix:** Add change to the still stretch (bring in the next element, reveal a detail, or animate part of what's shown), zoom toward the next thing that matters with an eased move, or start the next section sooner.
 
-| Option       | Default | What it controls                                                                                |
-| ------------ | ------- | ----------------------------------------------------------------------------------------------- |
-| `share`      | `0.01`  | The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing. |
-| `warnAfter`  | `1`     | The longest time, in seconds, the film may go without change before the rule reports a warning. |
-| `errorAfter` | `2`     | The time, in seconds, without change after which the finding is an error instead of a warning.  |
-| `endHold`    | `2.5`   | How long, in seconds, the film may stay unchanged at its very end without a finding.            |
+| Option       | Default | What it controls                                                                                                                                                   |
+| ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `share`      | `0.01`  | The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing.                                                                    |
+| `warnAfter`  | `1`     | The longest time, in seconds, the film may go without change before the rule reports a warning.                                                                    |
+| `errorAfter` | `1`     | The time, in seconds, without change after which the finding is an error instead of a warning. By default it is the same as warnAfter, so dead air fails the film. |
+| `endHold`    | `2.5`   | How long, in seconds, the film may stay unchanged at its very end without a finding.                                                                               |
 
 ### `pace/long-shot`
 
-Default: warn.
+Default: error.
 
 At least every 3.5 s, something changes substantially over at least 8% of the canvas.
 
@@ -406,6 +420,21 @@ No headline starts in the top 19% of the canvas height while also being wider th
 
 **Fix:** Place the headline in its own area beside or around the main element on screen, or break it onto more lines so it is narrower than 47% of the canvas.
 
+### `staging/small-subject`
+
+Default: error.
+
+Each hero reveal (the film's opening reveal, and every element marked `data-motion-reveal`) is at least 360 px at 1080p on its longer side, a third of the canvas's height, once it has landed and for 0.5 s after.
+
+**Why:** What a beat brings in is what the viewer is meant to look at. When it pops in as a small detail of a wide shot (a button in a header, a reaction the size of a thumbnail) the entrance is animated but nobody can see what arrived, and when the film's opening subject is small the hook has nothing to hold on to. The opening reveal is the first tagged element other than a cursor, logo or text that animates in during the first 3 s (skipping one carried in by a surface that is itself moving in, since the surface is then the subject), unless the film is a cold open (see `reveal/no-build-up`; without a rendered film, a cold open is what's on screen half a second in spanning 360 px). Size is the element's box, or, when the film is rendered, the part of the box whose pixels change as it arrives, since a padded button can be far larger than its icon.
+
+**Fix:** Frame the shot on the element before it enters: push the camera in until it is large and near the centre, let it land, hold, then pull back to show where it lives. For the opening, make the subject fill about a third of the frame's height. If it really is a supporting detail, don't tag it or animate its entrance.
+
+| Option | Default | What it controls                                                        |
+| ------ | ------- | ----------------------------------------------------------------------- |
+| `hero` | `360`   | The smallest longer side, in px at 1080p, of a hero reveal once landed. |
+| `hold` | `0.5`   | How long after landing, in seconds, it must stay at least that size.    |
+
 ## camera
 
 ### `camera/creep`
@@ -512,6 +541,80 @@ An element at least as large as a 70 × 70 px square at 1080p does not disappear
 | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `size`   | `70`    | The side, in px at 1080p, of the smallest square whose area an element must cover to be checked.                                                                                                                                                 |
 | `settle` | `0.1`   | The time, in seconds, before an element's last frame during which it must have stayed still and fully visible for the rule to apply (at least 2 frames). New content that arrives where the element was within this time counts as replacing it. |
+
+## reveal
+
+### `reveal/no-build-up`
+
+Default: error.
+
+Each hero reveal (the film's opening reveal, and every element marked `data-motion-reveal`) is built up to over the 1.5 s before it lands, by a camera push of at least 5% and by the sound (the highs rising 3 dB, or the track dropping out 6 dB); it lands within 0.1 s of a sound hit of at least 12 dB and of the camera's settle (a film with no sound track is judged on the camera alone); and nothing else on screen changes for 0.6 s after.
+
+**Why:** A reveal is the moment a film shows what it is about, and it works when the picture and the sound work on it together: the camera eases in toward where the subject will be while the music builds (the highs open up, a riser climbs, or the beat drops out), the subject lands on the hit as the camera settles, and the film holds on it long enough to register. Without that, a reveal reads as 'zoom, pop it in, move on'. The rule finds the film's opening reveal (the first tagged element other than a cursor, logo or text that animates in during the first 3 s, unless the film is a cold open: something is brought in within the first 0.25 s, or 15% of the rendered picture is new within the first 0.5 s) and every element marked as a key reveal with `data-motion-reveal`, which lands when it is still and fully shown. It measures the camera as the width of the painted box (a backdrop, window or panel) covering at least 25% of the canvas whose width changes most over the build; the sound from the rendered track as the loudness of the whole track and of the highs above 4 kHz, in windows of one frame, and hits as sudden rises in loudness. On a video file alone, with no elements, it judges the first burst of change over 3% of the canvas, and the camera push as most of the picture changing.
+
+**Fix:** Stage the reveal as one event. Start a slow, eased push in toward where the subject will land 1 to 2 s before it arrives; build the sound under it (a riser, a filter opening, or drop the kick out), and put the subject's landing, the end of the push and the hit or the return of the beat on the same frame. Then hold on the subject for at least 0.6 s, with nothing else arriving, before the next beat. If the reveal comes in the first second, open on the subject instead, or start the film earlier so there is time to build.
+
+| Option     | Default | What it controls                                                                                                   |
+| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| `build`    | `1.5`   | How long before the landing, in seconds, the camera and the sound must build.                                      |
+| `push`     | `0.05`  | The smallest zoom in, as a share of the camera layer's width (0.05 is 5%), that counts as a push.                  |
+| `rise`     | `3`     | How many dB the highs (above 4 kHz) must rise over the build to count as building.                                 |
+| `dropout`  | `6`     | How many dB the whole track must drop in the second before the landing to count as a drop-out building to the hit. |
+| `hit`      | `12`    | The smallest sudden rise, in dB summed over the whole track, the highs and the lows, that counts as a hit.         |
+| `together` | `0.1`   | How far apart, in seconds, the landing, the hit and the camera's settle may be.                                    |
+| `hold`     | `0.6`   | How long, in seconds, nothing else may change after the landing.                                                   |
+| `opening`  | `3`     | The opening reveal is the first one that starts within this many seconds.                                          |
+
+## opening
+
+### `opening/screen-recording`
+
+Default: error.
+
+The first 3 s don't open like a screen recording: something new covers at least 15% of the canvas within 1.5 s, before any cursor operates the interface, and the opening isn't mostly small changes (under 2% of the canvas).
+
+**Why:** The first seconds decide whether anyone keeps watching. An opening that parks the camera on an app, pulls back slowly and has a cursor click a menu looks like a screen recording of someone using software, which reads as robotic however polished each move is. A strong opening has a focal action that fills the frame (a subject arriving large, a title hit, a dramatic push) before the product is operated. It is measured on the rendered picture: what is new is the share of the canvas (in blocks of 32 px at 1080p) where at least a quarter of the pixels differ noticeably from a quarter of a second earlier, so fades count; small changes are frame-to-frame changes over less than 2% of the canvas. When the film has elements, it also finds when a cursor first moves on screen. Films people judged robotic showed at most 7% new in their first 3 s; an approved film showed 27% within 0.3 s.
+
+**Fix:** Open on the subject with a strong focal action: bring it in large with a push and a hit on the music, or open on a title moment, and only then show the interface being used. Move cursor-driven steps after the hook, and cut them short.
+
+| Option    | Default | What it controls                                                                          |
+| --------- | ------- | ----------------------------------------------------------------------------------------- |
+| `seconds` | `3`     | How long, in seconds, the opening is.                                                     |
+| `strong`  | `0.15`  | The share of the canvas (0.15 is 15%) that must be new to count as a strong focal action. |
+| `by`      | `1.5`   | How soon, in seconds, the first strong focal action must come.                            |
+| `small`   | `0.02`  | Changes under this share of the canvas (0.02 is 2%) are small: a cursor, a menu, a label. |
+
+## render
+
+### `render/shimmer`
+
+Default: error.
+
+No part of the picture with text or edges in it shimmers for 0.3 s or longer: keeps changing sharply from frame to frame while ending up where it was a quarter of a second earlier, over at least 0.2% of the canvas.
+
+**Why:** When text or a surface carrying text is pulsed, nudged or redrawn at each step of a small scale change, the renderer snaps every glyph to the pixel grid on its own, so the text visibly shakes even though in the DOM it barely moves. This is measured on the rendered picture, which the DOM can't show: in blocks of 32 px at 1080p that contain edges (text, outlines), a block shimmers on a frame when it changed sharply (a step of at least a third of the brightness range) on at least a third of the last quarter of a second, while differing from a quarter of a second earlier on almost none of its pixels. Frames where more than 3% of the canvas changes, during a move or a cut, aren't counted, since motion hides it.
+
+**Fix:** Find what moves by a pixel or two and back at the reported time: a pulse, an overshoot or a slow scale on a surface with text. Animate a border, fill or shape that carries no text instead, or put moving text on a layer of its own (`will-change: transform`, drawn at its largest size and only scaled down), so the renderer moves a finished picture of it.
+
+| Option    | Default | What it controls                                                               |
+| --------- | ------- | ------------------------------------------------------------------------------ |
+| `seconds` | `0.3`   | How long, in seconds, the shimmer must last to be reported.                    |
+| `area`    | `0.002` | The smallest share of the canvas (0.002 is 0.2%) that must shimmer on a frame. |
+
+### `render/low-frame-rate`
+
+Default: error.
+
+Motion updates on every frame: the picture never holds still on every other frame, 6 times in a row, while the frames around the held ones change over at least 0.5% of the canvas.
+
+**Why:** A move that only updates on every other frame (a screen recording at 30 fps in a 60 fps film, an animation stepped by hand, or a frame rate set per layer) judders next to the smooth motion around it, and viewers read it as low quality. It is measured on the rendered picture: a frame that is identical to the one before, between two frames that each change over at least 0.5% of the canvas, is a held frame, and motion stepped at half the frame rate holds on every other frame for as long as it moves. Held frames at an irregular rhythm, as typing makes, aren't reported.
+
+**Fix:** Render every moving layer at the film's frame rate: record or export product footage at the film's frame rate, interpolate keyframes on every frame instead of stepping them, and don't round `frame` to a coarser step for anything that moves.
+
+| Option  | Default | What it controls                                                                                    |
+| ------- | ------- | --------------------------------------------------------------------------------------------------- |
+| `share` | `0.005` | The share of the canvas (0.005 is 0.5%) the frames around a held frame must change for it to count. |
+| `held`  | `6`     | How many held frames in a row, each two frames after the last, are reported.                        |
 
 ## regression
 

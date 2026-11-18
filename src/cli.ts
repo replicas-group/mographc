@@ -16,6 +16,7 @@ import { capture, findProject } from "./capture.ts";
 import { allRules, loadConfig } from "./config.ts";
 import { Film } from "./film.ts";
 import { failing, run } from "./lint.ts";
+import { analyse } from "./render.ts";
 import { bold, format } from "./report.ts";
 import { runFiles } from "./runner.ts";
 import type { Finding } from "./rule.ts";
@@ -45,6 +46,8 @@ Options
   --json             Print findings as JSON.
   --warnings=false   Print errors only.
   --no-cache         Measure the film again even if its source files haven't changed.
+  --no-render        Don't render the film to video, and skip the rules that read its pixels and sound.
+  --video <file>     Lint a video file on its own (an mp4 with no Remotion project): only the rules that read pixels and sound run.
 
 Documentation: https://github.com/replicas-group/mographc/tree/main/docs
 `;
@@ -67,7 +70,7 @@ const positional = args.filter(
       i > 0 &&
       args[i - 1].startsWith("--") &&
       !args[i - 1].includes("=") &&
-      ["--entry", "--config", "--frames"].includes(args[i - 1])
+      ["--entry", "--config", "--frames", "--video"].includes(args[i - 1])
     ),
 );
 const command = positional[0] ?? "help";
@@ -82,7 +85,7 @@ const log = (m: string) => {
 const baselinePath = (root: string, composition: string) =>
   path.join(root, ".mographc", "baselines", `${composition}.json.gz`);
 
-const films = async () => {
+const films = async (render = false) => {
   const project = await findProject(process.cwd(), flag("entry"));
   const frames = flag("frames")?.split("-").map(Number) as
     | [number, number]
@@ -91,13 +94,43 @@ const films = async () => {
     compositions: positional.slice(1),
     frames,
     cache: flag("no-cache") !== "true",
+    render: render && flag("no-render") !== "true",
     log,
   });
   return { project, raws };
 };
 
+/** A video file on its own: a film with frames but no elements, linted by the rules that read pixels and sound. */
+const lintVideo = async (file: string) => {
+  const rendered = await analyse(path.resolve(file));
+  const name = path.basename(file).replace(/\.[^.]+$/, "");
+  const film = new Film({
+    composition: name,
+    fps: rendered.fps,
+    width: rendered.width,
+    height: rendered.height,
+    durationInFrames: rendered.frames,
+    frames: Array.from({ length: rendered.frames }, (_, f) => ({
+      f,
+      c: [rendered.width, rendered.height],
+      e: [],
+    })),
+  });
+  let config: Awaited<ReturnType<typeof loadConfig>>["config"];
+  try {
+    const project = await findProject(process.cwd());
+    config = (await loadConfig(project.root, flag("config"))).config;
+  } catch {
+    config = (await loadConfig(process.cwd(), flag("config"))).config;
+  }
+  log(
+    `${name}: ${rendered.frames} frames${rendered.sound ? " with sound" : ", no sound"}; only the rules that read pixels and sound run`,
+  );
+  return run(film, config, { kinds: ["lint"], rendered, renderOnly: true });
+};
+
 const lintAll = async (kinds: ("check" | "lint")[]) => {
-  const { project, raws } = await films();
+  const { project, raws } = await films(kinds.includes("lint"));
   const { config, file } = await loadConfig(project.root, flag("config"));
   if (kinds.includes("lint"))
     log(
@@ -116,7 +149,12 @@ const lintAll = async (kinds: ("check" | "lint")[]) => {
         : undefined;
     if (baseline)
       log(`${raw.composition}: comparing against the approved baseline`);
-    findings.push(...run(new Film(raw), config, { kinds, baseline }));
+    const rendered = raw.video ? await analyse(raw.video) : undefined;
+    if (kinds.includes("lint") && !rendered)
+      log(
+        `${raw.composition}: not rendered, so the rules that read pixels and sound didn't run`,
+      );
+    findings.push(...run(new Film(raw), config, { kinds, baseline, rendered }));
   }
   return { findings, project };
 };
@@ -159,8 +197,11 @@ const main = async (): Promise<number> => {
   switch (command) {
     case "check":
       return output((await lintAll(["check"])).findings);
-    case "lint":
+    case "lint": {
+      const video = flag("video");
+      if (video && video !== "true") return output(await lintVideo(video));
       return output((await lintAll(["check", "lint"])).findings);
+    }
     case "test":
       return runTests((await findProject(process.cwd())).root);
     case "verify": {

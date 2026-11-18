@@ -78,6 +78,13 @@ Findings and tests are much easier to read when the film's important elements ha
 - The part after the colon is the name that findings and tests use.
 - Elements without a tag are still checked. mographc follows them from frame to frame by their place in the page structure, their position and their size, and infers their role. For example, untagged text at least 40 px tall at 1080p that isn't inside a surface is a headline.
 - `data-motion-tip` marks the [tip](terms.md#elements) of a cursor, the point that clicks, so that `toPointAt` can check exactly where a click lands.
+- `data-motion-reveal` marks a [key reveal](terms.md#reveals): an element whose arrival the film builds to, such as the product shot the whole film is about. `reveal/no-build-up` and `staging/small-subject` check that the camera and the sound build to it, that it lands on a hit, holds and is large. The film's opening reveal is checked without a mark.
+
+  ```tsx
+  <div data-motion="window:phone" data-motion-reveal>
+    …
+  </div>
+  ```
 
 ---
 

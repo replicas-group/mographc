@@ -7,7 +7,7 @@ export const RemotionRoot: React.FC = () => (
       id="Demo"
       component={Demo}
       defaultProps={{ broken: false }}
-      durationInFrames={154}
+      durationInFrames={168}
       fps={30}
       width={1920}
       height={1080}
@@ -17,7 +17,7 @@ export const RemotionRoot: React.FC = () => (
       id="DemoBroken"
       component={Demo}
       defaultProps={{ broken: true }}
-      durationInFrames={154}
+      durationInFrames={168}
       fps={30}
       width={1920}
       height={1080}

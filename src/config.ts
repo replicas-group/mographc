@@ -20,6 +20,8 @@ import { spacingRules } from "./rules/spacing.ts";
 import { motionRules } from "./rules/motion.ts";
 import { regressionRules } from "./rules/regression.ts";
 import { stagingRules } from "./rules/staging.ts";
+import { revealRules } from "./rules/reveal.ts";
+import { renderedRules } from "./rules/rendered.ts";
 
 export type RuleSetting =
   | Severity
@@ -36,6 +38,8 @@ export interface ConfigBlock {
   /** Only between these times, in seconds. A block with a time range must give a reason. */
   between?: [number, number];
   reason?: string;
+  /** How many different accepted findings (a rule with its reason) a film may have before it fails. The last block that sets it wins. Default 8. */
+  maxAccepted?: number;
 }
 
 export type Config = ConfigBlock[];
@@ -68,6 +72,8 @@ const recommendedRules = [
   ...attentionRules,
   ...spacingRules,
   ...stagingRules,
+  ...revealRules,
+  ...renderedRules,
   ...regressionRules,
 ];
 
@@ -102,6 +108,9 @@ export const loadConfig = async (
       );
   return { config, file: found };
 };
+
+export const maxAccepted = (config: Config) =>
+  config.reduce((n, b) => b.maxAccepted ?? n, 8);
 
 export interface ResolvedRule {
   rule: AnyRule;

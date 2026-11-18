@@ -22,19 +22,19 @@ export const activity = defineRule({
   id: "pace/activity",
   kind: "lint",
   severity: "error",
-  options: { share: 0.01, warnBelow: 0.6, errorBelow: 0.45 },
+  options: { share: 0.01, warnBelow: 0.6, errorBelow: 0.6 },
   docs: {
     summary:
-      "On at least 60% of the film's frames, something changes over at least 1% of the canvas (a warning below 60%, an error below 45%).",
+      "On at least 60% of the film's frames, something changes over at least 1% of the canvas.",
     why: "When nothing changes on screen, viewers tend to stop watching, and the film looks like a slideshow. Films that hold attention have something changing almost all the time: elements appearing one by one, the next element arriving, or a zoom toward what matters next. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. Slow, steady movement (see `camera/creep`) doesn't count.",
     fix: "Split long sections into shorter ones that each show one thing, bring elements in one at a time instead of showing them complete, and bring in the next element while the viewer reads text. A slow zoom or drift doesn't count as change.",
     options: {
       share:
         "The minimum share of the canvas (0.01 is 1%) that must change for a frame to count as changing.",
       warnBelow:
-        "The share of frames (0.6 is 60%) that must be changing; below it the rule reports a warning.",
+        "The share of frames (0.6 is 60%) that must be changing; below it the rule reports a finding.",
       errorBelow:
-        "The share of changing frames below which the finding is an error instead of a warning.",
+        "The share of changing frames below which the finding is an error; between it and warnBelow it is a warning. By default they're the same, so a film that is still too often fails.",
     },
   },
   check({ film, options, report }) {
@@ -53,10 +53,10 @@ export const deadAir = defineRule({
   id: "pace/dead-air",
   kind: "lint",
   severity: "error",
-  options: { share: 0.01, warnAfter: 1.0, errorAfter: 2.0, endHold: 2.5 },
+  options: { share: 0.01, warnAfter: 1.0, errorAfter: 1.0, endHold: 2.5 },
   docs: {
     summary:
-      "The film never goes more than 1.0 s without something changing over at least 1% of the canvas (an error after 2.0 s), except for a still ending of up to 2.5 s.",
+      "The film never goes more than 1.0 s without something changing over at least 1% of the canvas, except for a still ending of up to 2.5 s.",
     why: "A picture that stays frozen looks as if the video has stalled. A frame counts as changing when elements covering at least 1% of the canvas move faster than 45 px/s at 1080p, resize, fade, change their text, appear or disappear. A slow zoom or drift doesn't count, because it doesn't show the viewer anything new. The end of the film, for example a logo or end card, may stay still for up to 2.5 s.",
     fix: "Add change to the still stretch (bring in the next element, reveal a detail, or animate part of what's shown), zoom toward the next thing that matters with an eased move, or start the next section sooner.",
     options: {
@@ -65,7 +65,7 @@ export const deadAir = defineRule({
       warnAfter:
         "The longest time, in seconds, the film may go without change before the rule reports a warning.",
       errorAfter:
-        "The time, in seconds, without change after which the finding is an error instead of a warning.",
+        "The time, in seconds, without change after which the finding is an error instead of a warning. By default it is the same as warnAfter, so dead air fails the film.",
       endHold:
         "How long, in seconds, the film may stay unchanged at its very end without a finding.",
     },
@@ -93,7 +93,7 @@ export const deadAir = defineRule({
 export const longShot = defineRule({
   id: "pace/long-shot",
   kind: "lint",
-  severity: "warn",
+  severity: "error",
   options: { bigChange: 0.08, seconds: 3.5 },
   docs: {
     summary:

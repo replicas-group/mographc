@@ -1,6 +1,6 @@
 # Demo film
 
-A short Remotion film for trying mographc: a headline, a chat window, and a cursor that types a prompt and clicks _Send_.
+A short Remotion film for trying mographc: a headline, a chat window, and a cursor that types a prompt and clicks _Send_. The window is the film's opening reveal: the camera eases in on it under a riser (`public/score.wav`), and it lands on the hit as the camera settles.
 
 There are two compositions:
 
@@ -11,7 +11,7 @@ There are two compositions:
 npm run build                 # in the repository root, once
 cd examples/demo && npm install
 npm run verify                # Demo: passes
-npm run verify:broken         # DemoBroken: 2 lint errors and 4 failing tests
+npm run verify:broken         # DemoBroken: 3 lint errors and 4 failing tests
 npm run dev                   # opens Remotion Studio
 ```
 

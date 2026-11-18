@@ -24,6 +24,14 @@ export {
   type Sample,
 } from "./film.ts";
 export { failing, run } from "./lint.ts";
+export {
+  analyse,
+  findFfmpeg,
+  type Picture,
+  type Rendered,
+  type Sound,
+} from "./render.ts";
+export { arrivals, heroReveals, type Reveal } from "./rules/reveal.ts";
 export { format } from "./report.ts";
 export { px } from "./rules/util.ts";
 export {

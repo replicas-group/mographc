@@ -25,6 +25,97 @@ const intersect = (a: Box, b: Box): Box => {
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
+/**
+ * A cut-out's matte, measured once per image: the opaque pieces apart from the largest, and how many
+ * of them end in a straight, hard edge inside the image (a piece chopped off by a bad cut).
+ */
+const mattes = new Map<string, [number, number] | null>();
+const matte = (img: HTMLImageElement): [number, number] | null => {
+  const key = img.currentSrc || img.src;
+  if (mattes.has(key)) return mattes.get(key)!;
+  let out: [number, number] | null = null;
+  try {
+    if (/\.svg(\?|$)|^data:image\/svg/i.test(key)) throw new Error("vector");
+    const scale = 256 / Math.max(img.naturalWidth, img.naturalHeight, 1);
+    const w = Math.max(1, Math.round(img.naturalWidth * Math.min(1, scale)));
+    const h = Math.max(1, Math.round(img.naturalHeight * Math.min(1, scale)));
+    const ctx = Object.assign(document.createElement("canvas"), {
+      width: w,
+      height: h,
+    }).getContext("2d")!;
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const solid = new Uint8Array(w * h);
+    let opaque = 0;
+    for (let i = 0; i < w * h; i += 1)
+      if (data[i * 4 + 3] >= 128) {
+        solid[i] = 1;
+        opaque += 1;
+      }
+    // Only images with transparency are cut-outs.
+    if (opaque > 0 && opaque < 0.97 * w * h) {
+      const label = new Int32Array(w * h);
+      const pieces: number[][] = [];
+      for (let i = 0; i < w * h; i += 1) {
+        if (!solid[i] || label[i]) continue;
+        const piece = [i];
+        label[i] = pieces.length + 1;
+        for (let k = 0; k < piece.length; k += 1) {
+          const j = piece[k];
+          const x = j % w;
+          for (const n of [
+            x > 0 ? j - 1 : -1,
+            x < w - 1 ? j + 1 : -1,
+            j - w,
+            j + w,
+          ])
+            if (n >= 0 && n < w * h && solid[n] && !label[n]) {
+              label[n] = pieces.length + 1;
+              piece.push(n);
+            }
+        }
+        pieces.push(piece);
+      }
+      pieces.sort((a, b) => b.length - a.length);
+      const fragments = pieces
+        .slice(1)
+        .filter((p) => p.length >= 0.002 * opaque);
+      // A straight cut: a run of edge pixels along one row or column, away from the image's border.
+      const run = Math.max(8, Math.round(0.06 * Math.max(w, h)));
+      const chopped = fragments.filter((p) => {
+        const lines = new Map<string, number[]>();
+        const add = (k: string, v: number) => {
+          const l = lines.get(k);
+          if (l) l.push(v);
+          else lines.set(k, [v]);
+        };
+        for (const j of p) {
+          const x = j % w;
+          const y = (j - x) / w;
+          if (x > 1 && !solid[j - 1]) add(`l${x}`, y);
+          if (x < w - 2 && !solid[j + 1]) add(`r${x}`, y);
+          if (y > 1 && !solid[j - w]) add(`t${y}`, x);
+          if (y < h - 2 && !solid[j + w]) add(`b${y}`, x);
+        }
+        for (const at of lines.values()) {
+          at.sort((a, b) => a - b);
+          let n = 1;
+          for (let k = 1; k < at.length; k += 1) {
+            n = at[k] === at[k - 1] + 1 ? n + 1 : 1;
+            if (n >= run) return true;
+          }
+        }
+        return false;
+      }).length;
+      out = [fragments.length, chopped];
+    }
+  } catch {
+    out = null;
+  }
+  mattes.set(key, out);
+  return out;
+};
+
 /** Tag and class, so a sibling mounting doesn't rename the elements after it. */
 const signature = (el: Element) => {
   let hash = 0;
@@ -217,6 +308,10 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
     }
     const img = el as HTMLImageElement;
     if (el.tagName === "IMG" && img.complete && !img.naturalWidth) row.br = 1;
+    else if (el.tagName === "IMG" && img.complete) {
+      const m = matte(img);
+      if (m && m[0]) row.mt = m;
+    }
     if (shadow) row.sh = shadows.join(" | ").slice(0, 200);
     const stretch = stretchOf(linear.get(el)!);
     if (stretch > 1.001) row.st = Math.round(stretch * 1000) / 1000;
@@ -232,6 +327,7 @@ const dump = (root: HTMLElement, frame: number, w: number, h: number) => {
           r1((tip.top + tip.height / 2 - canvas.top) / sy),
         ];
     }
+    if (el.hasAttribute("data-motion-reveal")) row.rv = 1;
     const ignore = el.getAttribute("data-motion-ignore");
     if (ignore) row.ig = ignore;
     rows.push(row);

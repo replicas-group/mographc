@@ -25,6 +25,8 @@ export interface RawElement {
   fb?: string;
   /** Image that failed to load. */
   br?: 1;
+  /** A cut-out image's matte: opaque pieces detached from its largest, and how many of them end in a straight cut. */
+  mt?: [number, number];
   /** Its box, text and drop shadows, as computed. */
   sh?: string;
   /** Squash and stretch of all its transforms: long axis over short axis. */
@@ -35,6 +37,8 @@ export interface RawElement {
   /** An svg's painted fill and outline stroke, computed (currentColor resolved). */
   pf?: string;
   ps?: string;
+  /** A key reveal the film builds to: `data-motion-reveal`. */
+  rv?: 1;
   /** data-motion and data-motion-ignore. */
   id?: string;
   ig?: string;
@@ -55,4 +59,6 @@ export interface RawFilm {
   height: number;
   durationInFrames: number;
   frames: RawFrame[];
+  /** The rendered video, when mographc rendered one. */
+  video?: string;
 }

@@ -147,6 +147,8 @@ export interface CaptureOptions {
   frames?: [number, number];
   concurrency?: number;
   cache?: boolean;
+  /** Also render each composition to a video (cached like the measurements), for the rules that read pixels and sound. */
+  render?: boolean;
   log?: (message: string) => void;
 }
 
@@ -166,7 +168,7 @@ export const capture = async (
   const { bundle } = await import(
     resolveRemotion(project, "@remotion/bundler")
   );
-  const { getCompositions, renderFrames } = await import(
+  const { getCompositions, renderFrames, renderMedia } = await import(
     resolveRemotion(project, "@remotion/renderer")
   );
 
@@ -215,8 +217,31 @@ export const capture = async (
       cacheDir,
       `${composition.id}-${hash}-${range.join("_")}.json.gz`,
     );
+    const video = file.replace(/\.json\.gz$/, ".mp4");
+    const withVideo = async (film: RawFilm) => {
+      if (!options.render || options.frames) return film;
+      if (options.cache === false || !existsSync(video)) {
+        log(
+          `${composition.id}: rendering ${composition.durationInFrames} frames`,
+        );
+        mkdirSync(cacheDir, { recursive: true });
+        await renderMedia({
+          serveUrl: await serve(),
+          composition,
+          codec: "h264",
+          crf: 16,
+          outputLocation: video,
+          logLevel: "error",
+          // The probe logs every frame; that's data for capture, not output.
+          onBrowserLog: () => {},
+        });
+      }
+      return { ...film, video };
+    };
     if (options.cache !== false && existsSync(file)) {
-      films.push(JSON.parse(gunzipSync(readFileSync(file)).toString()));
+      films.push(
+        await withVideo(JSON.parse(gunzipSync(readFileSync(file)).toString())),
+      );
       log(`${composition.id}: from cache`);
       continue;
     }
@@ -259,7 +284,7 @@ export const capture = async (
     };
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(file, gzipSync(JSON.stringify(film)));
-    films.push(film);
+    films.push(await withVideo(film));
   }
   return films;
 };

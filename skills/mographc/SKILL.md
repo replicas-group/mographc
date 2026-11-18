@@ -56,7 +56,10 @@ Give every important element a tag, so that findings and tests can refer to it b
 ```tsx
 <div data-motion="window:pr" style={…}>…</div>          // tags: window, card, panel, cursor, button, headline, logo…
 <div data-motion="cursor:agent">… <div data-motion-tip style={{ position: "absolute", left: 3, top: 2 }} /> …</div>
+<div data-motion="window:phone" data-motion-reveal>…</div>  // a key reveal the film builds to
 ```
+
+Mark each key reveal (the moment the film shows what it is about) with `data-motion-reveal`. The camera and the sound must build to it for 1 to 2 s, it must land on a hit as the camera settles, hold for 0.6 s and be at least a third of the canvas's height. The film's opening reveal is checked the same way without a mark.
 
 Then repeat:
 
@@ -71,6 +74,8 @@ npx mographc verify      # compiler, linter and your tests; exits 1 on any error
   <div data-motion="cursor:agent" data-motion-ignore="cursor/dead-exit: it turns into the share button">
   ```
   For a time range in seconds, add `{ between: [9.5, 13], rules: { "staging/no-padding": "off" }, reason: "…" }` to `mographc.config.ts`.
+- `verify` renders the film and reads its pixels and sound too (text that shimmers, an opening that looks like a screen recording, a reveal the music doesn't build to). Don't pass `--no-render` for the run before a person watches the cut.
+- Suppressions need a reason, and a film may accept at most 8 different findings. Fix findings rather than accepting them.
 - `npx mographc elements` lists every element mographc sees, with ids, roles and times. Use it to decide what to tag, or to find out why a test can't find an element.
 
 ## 4. Write tests that record what you intended
