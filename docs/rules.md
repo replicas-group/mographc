@@ -103,7 +103,7 @@ Default: error.
 
 A cut-out image (one with transparency) shown over at least 1% of the canvas is one piece: none of its opaque parts are detached from the largest one and end in a straight cut.
 
-**Why:** When a photo is cut out by a background remover, parts of the subject that were overlapped or touched the edge (fingertips around a phone, hair over a shoulder) come out as separate islands with flat, chopped edges. Composited over the film they float next to the subject and look broken. It is measured on the image's own transparency, once per image: the opaque pieces apart from the largest (each at least 0.2% of its opaque area), and whether a piece has a straight edge at least 6% of the image's size long along a row or column inside the image.
+**Why:** When a photo is cut out by a background remover, parts of the subject that were overlapped or touched the edge (fingertips around a phone, hair over a shoulder) come out as separate islands with flat, chopped edges. Composited over the film they float next to the subject and look broken. It is measured on the image's own transparency, once per image: the opaque pieces apart from the largest (each at least 0.2% of its opaque area), and whether a piece has a straight edge at least 4% of the image's size long along a row or column inside the image. Images whose largest piece is less than 70% of their opaque area (a wordmark, an illustration of many parts) and logos aren't checked.
 
 **Fix:** Fix the matte, not the film: cut the image out again with a better mask, paint the detached pieces back onto the subject or delete them, or crop or cover the part where they are so they're never on screen.
 

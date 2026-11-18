@@ -81,7 +81,7 @@ const matte = (img: HTMLImageElement): [number, number] | null => {
         .slice(1)
         .filter((p) => p.length >= 0.002 * opaque);
       // A straight cut: a run of edge pixels along one row or column, away from the image's border.
-      const run = Math.max(8, Math.round(0.06 * Math.max(w, h)));
+      const run = Math.max(8, Math.round(0.04 * Math.max(w, h)));
       const chopped = fragments.filter((p) => {
         const lines = new Map<string, number[]>();
         const add = (k: string, v: number) => {
@@ -107,7 +107,9 @@ const matte = (img: HTMLImageElement): [number, number] | null => {
         }
         return false;
       }).length;
-      out = [fragments.length, chopped];
+      // A photo cut-out is one main body; art made of many similar pieces (a wordmark) isn't one.
+      out =
+        pieces[0].length >= 0.7 * opaque ? [fragments.length, chopped] : null;
     }
   } catch {
     out = null;
