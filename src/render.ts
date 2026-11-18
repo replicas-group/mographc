@@ -188,8 +188,11 @@ const analysePicture = async (
       file,
       "-vf",
       `scale=${width}:${height}:flags=area,format=gray`,
-      "-f",
+      // Raw frames through image2pipe, not the rawvideo muxer, which Remotion's ffmpeg doesn't have.
+      "-c:v",
       "rawvideo",
+      "-f",
+      "image2pipe",
     ],
     n,
     (chunk) => {
@@ -291,7 +294,8 @@ const analyseSound = async (
 ): Promise<Sound> => {
   const rate = 24000;
   const chunks: Buffer[] = [];
-  // Collect the whole track (a minute of mono at 24 kHz is under 6 MB).
+  // Collect the whole track as 16-bit wav, which every ffmpeg build can write (a minute of mono at
+  // 24 kHz is under 3 MB).
   await new Promise<void>((resolve, reject) => {
     const p = spawn(ffmpeg, [
       "-v",
@@ -303,8 +307,10 @@ const analyseSound = async (
       "1",
       "-ar",
       String(rate),
+      "-c:a",
+      "pcm_s16le",
       "-f",
-      "f32le",
+      "wav",
       "pipe:1",
     ]);
     p.stdout.on("data", (d: Buffer) => chunks.push(d));
@@ -312,11 +318,12 @@ const analyseSound = async (
     p.on("close", () => resolve());
   });
   const buf = Buffer.concat(chunks);
-  const samples = new Float32Array(
-    buf.buffer,
-    buf.byteOffset,
-    Math.floor(buf.length / 4),
-  ).slice();
+  // The samples follow the "data" chunk's id and size; a piped wav doesn't know its length.
+  const at = buf.indexOf("data", 12);
+  const start = at < 0 ? buf.length : at + 8;
+  const samples = new Float32Array(Math.floor((buf.length - start) / 2));
+  for (let i = 0; i < samples.length; i += 1)
+    samples[i] = buf.readInt16LE(start + i * 2) / 32768;
   const high = biquad(samples, rate, 4000, true);
   const low = biquad(samples, rate, 150, false);
   const per = rate / fps;
